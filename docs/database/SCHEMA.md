@@ -26,20 +26,26 @@ Tracciabilità richieste.
 - `id`: PK
 - `codice_ticket`: Indice univoco (es. IR12345)
 
-### 5. `inventory.sistemi_target`
+### 5. `inventory.tipi_utenza`
+Lookup per la classificazione delle utenze.
+- `id`: PK
+- `codice`: OBJ, SV, NOMINALE
+- `descrizione`: Testo descrittivo
+
+### 6. `inventory.sistemi_target`
 Il cuore della configurazione tecnica.
 - `id`: PK
 - `nome_sistema`: Nome identificativo (DB Name)
 - `configurazione`: Campo **JSONB** che contiene i parametri variabili per tecnologia.
 
-### 6. `inventory.utenze`
+### 7. `inventory.utenze`
 Dati delle credenziali.
 - `id`: PK
 - `username`: Nome utente sul sistema target
 - `vault_path`: Percorso del segreto in OpenBao (KV Engine)
 - `attributi_specifici`: Campo **JSONB** per metadati utente.
 
-### 7. `inventory.audit_log`
+### 8. `inventory.audit_log`
 Registro di sicurezza.
 - `id`: PK
 - `azione`: Tipo operazione (READ_PASSWORD, CHANGE_PASSWORD, etc.)
