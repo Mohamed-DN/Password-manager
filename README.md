@@ -35,6 +35,8 @@ La documentazione tecnica dello schema, dei ruoli e della sicurezza del database
 
 👉 **[Dettagli Database & Sicurezza](./docs/database/SCHEMA.md)**
 
+👉 **[Configurazione OpenBao (Vault)](./docs/security/OPENBAO_CONFIG.md)**
+
 In sintesi:
 - **Flessibilità**: Utilizzo di PostgreSQL con campi **JSONB** per adattarsi a qualsiasi tecnologia (Oracle, OCI, NoSQL).
 - **Integrità**: Tracciamento di ogni operazione tramite **Audit Log**.
