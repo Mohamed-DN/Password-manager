@@ -5,3 +5,8 @@
 #
 # Hourly backup: pg_dump + vault snapshot — runs at minute 0 of every hour.
 0 * * * * /usr/local/bin/backup.sh >> /var/log/backup.log 2>&1
+
+# Offsite copy: push backups + vault init file to the DR host via rsync.
+# Runs 5 minutes after each hourly backup to ensure files are complete.
+# This is a no-op when OFFSITE_HOST is not set.
+5 * * * * /usr/local/bin/offsite-copy.sh >> /var/log/backup.log 2>&1
