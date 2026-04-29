@@ -212,6 +212,7 @@ body {
 }
 
 .env-produzione { background: #fee2e2; color: #dc2626; }
+.env-preproduzione { background: #fce7f3; color: #9d174d; }
 .env-collaudo { background: #fef3c7; color: #d97706; }
 .env-sviluppo { background: #e0f2fe; color: #0284c7; }
 
@@ -283,3 +284,19 @@ body {
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
 .animate-in { animation: modalIn 0.3s cubic-bezier(0.16, 1, 0.3, 1); }
 @keyframes modalIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+
+.hint-text { color: var(--text-muted); font-size: 0.85rem; }
+
+.status-badge { display: flex; align-items: center; gap: 0.4rem; font-size: 0.8rem; font-weight: 500; color: var(--text-muted); }
+.dot { width: 8px; height: 8px; border-radius: 50%; background: #d1d5db; }
+.dot.active { background: var(--success); }
+
+.loader-overlay {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  color: var(--text-muted);
+}

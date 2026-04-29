@@ -1,11 +1,31 @@
-from fastapi import FastAPI, HTTPException, Depends, Request
+from contextlib import asynccontextmanager
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional, Dict, Any, List
+from typing import Optional, Dict, Any, Union
 from database import db, get_db_connection
 from vault import store_password, get_password
 import json
 
-app = FastAPI(title="Inventory API", description="API per gestione inventario sistemi e segreti OpenBao")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    await db.connect()
+    yield
+    await db.disconnect()
+
+app = FastAPI(
+    title="Inventory API",
+    description="API per gestione inventario sistemi e segreti OpenBao",
+    lifespan=lifespan,
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:5173"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 async def log_action(azione: str, dettagli: Dict[str, Any], request: Request):
     """Salva un'azione nell'audit log."""
@@ -20,14 +40,6 @@ async def log_action(azione: str, dettagli: Dict[str, Any], request: Request):
             json.dumps(dettagli),
             request.client.host
         )
-
-@app.on_event("startup")
-async def startup():
-    await db.connect()
-
-@app.on_event("shutdown")
-async def shutdown():
-    await db.disconnect()
 
 # --- Modelli Pydantic (Validazione Input) ---
 class SystemTarget(BaseModel):
@@ -96,7 +108,7 @@ async def create_sistema(sistema: SystemTarget):
 async def get_utenze():
     """Recupera tutte le utenze censite senza le password."""
     async with get_db_connection() as conn:
-        rows = await conn.fetch("SELECT id, username, sistema_target_id, vault_path, attiva FROM utenze")
+        rows = await conn.fetch("SELECT id, username, sistema_target_id, bao_owner_id, ticket_id, vault_path, attiva FROM utenze")
         return [dict(r) for r in rows]
 
 @app.post("/api/utenze")
@@ -140,12 +152,12 @@ class UnifiedEntry(BaseModel):
     username: str
     password: str
     tipo_utenza_id: int
-    bao_owner: Any # Può essere un ID (int) o un Nome Completo (str)
+    bao_owner: Union[int, str]  # Può essere un ID (int) o un Nome Completo (str)
     ticket_codice: str
     attributi_specifici: Dict[str, Any] = {}
 
 @app.post("/api/entry")
-async def create_unified_entry(entry: UnifiedEntry):
+async def create_unified_entry(entry: UnifiedEntry, request: Request):
     async with get_db_connection() as conn:
         async with conn.transaction():
             # 1. Gestione BAO Owner (Nuovo o Esistente)
@@ -166,19 +178,19 @@ async def create_unified_entry(entry: UnifiedEntry):
                 entry.ticket_codice
             )
 
-            # 2. Creazione Sistema
+            # 3. Creazione Sistema
             sistema_id = await conn.fetchval(
                 "INSERT INTO sistemi_target (nome_sistema, ambiente_id, tecnologia_id, configurazione) VALUES ($1, $2, $3, $4) RETURNING id",
                 entry.nome_sistema, entry.ambiente_id, entry.tecnologia_id, entry.configurazione
             )
 
-            # 3. Vault
+            # 4. Vault
             vault_path = f"inventory/sistemi/{sistema_id}/utenti/{entry.username}"
             success = store_password(vault_path, entry.password)
             if not success:
                 raise HTTPException(status_code=500, detail="Vault Error")
 
-            # 4. Utenza
+            # 5. Utenza
             utenza_id = await conn.fetchval(
                 """
                 INSERT INTO utenze (username, sistema_target_id, tipo_utenza_id, bao_owner_id, ticket_id, vault_path, attributi_specifici)
@@ -187,6 +199,7 @@ async def create_unified_entry(entry: UnifiedEntry):
                 entry.username, sistema_id, entry.tipo_utenza_id, bao_owner_id, ticket_id, vault_path, entry.attributi_specifici
             )
 
+            await log_action("CREATE_ENTRY", {"utenza_id": utenza_id, "username": entry.username, "sistema": entry.nome_sistema}, request)
             return {"message": "Dati salvati correttamente", "id": utenza_id}
 
 class PasswordUpdate(BaseModel):
@@ -229,3 +242,12 @@ async def fetch_password(utenza_id: int, request: Request):
         await log_action("VIEW_PASSWORD", {"utenza_id": utenza_id, "username": row['username']}, request)
             
         return {"password": password}
+
+@app.get("/api/audit")
+async def get_audit_log():
+    """Recupera le ultime 200 voci dell'audit log in ordine cronologico inverso."""
+    async with get_db_connection() as conn:
+        rows = await conn.fetch(
+            "SELECT id, timestamp, utente_operatore, azione, dettagli, ip_address FROM audit_log ORDER BY timestamp DESC LIMIT 200"
+        )
+        return [dict(r) for r in rows]

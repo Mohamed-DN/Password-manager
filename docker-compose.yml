@@ -15,6 +15,11 @@ services:
       # Questo script gira solo la prima volta che si crea il volume
       - ./init.sql:/docker-entrypoint-initdb.d/init.sql
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d vault_inventory_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   openbao:
     # Usiamo l'immagine ufficiale di HashiCorp Vault come equivalente 1:1 API compatibile per lo sviluppo locale.
@@ -32,6 +37,11 @@ services:
     # Avviamo in modalità Sviluppo: Token Root="root", memoria RAM, niente Unseal manuale per comodità locale.
     command: server -dev -dev-listen-address="0.0.0.0:8200" -dev-root-token-id="root"
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "vault", "status", "-address=http://127.0.0.1:8200"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   backend:
     build: ./backend
@@ -39,11 +49,31 @@ services:
     ports:
       - "8000:8000"
     depends_on:
-      - postgres
-      - openbao
+      postgres:
+        condition: service_healthy
+      openbao:
+        condition: service_healthy
     environment:
       - VAULT_ADDR=http://inventory-bao:8200
       - VAULT_TOKEN=root
+      - DB_HOST=inventory-db
+      - DB_USER=inventory_app
+      - DB_PASSWORD=PasswordBackend123!
+      - DB_NAME=vault_inventory_db
+      - DB_SCHEMA=inventory
+    restart: unless-stopped
+
+  frontend:
+    image: node:22-alpine
+    container_name: inventory-ui
+    working_dir: /app
+    volumes:
+      - ./frontend:/app
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
     restart: unless-stopped
 
 volumes:

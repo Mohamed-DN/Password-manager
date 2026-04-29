@@ -57,7 +57,7 @@ CREATE TABLE bao_owners (
     id          INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     nome        VARCHAR(100) NOT NULL,
     cognome     VARCHAR(100) NOT NULL,
-    email       VARCHAR(200),
+    email       VARCHAR(200) UNIQUE,
     matricola   VARCHAR(20)
 );
 
