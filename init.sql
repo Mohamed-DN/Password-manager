@@ -57,7 +57,7 @@ CREATE TABLE bao_owners (
     id          INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     nome        VARCHAR(100) NOT NULL,
     cognome     VARCHAR(100) NOT NULL,
-    email       VARCHAR(200) UNIQUE NOT NULL,
+    email       VARCHAR(200),
     matricola   VARCHAR(20)
 );
 
@@ -133,8 +133,8 @@ CREATE INDEX idx_utenze_bao ON utenze(bao_owner_id);
 CREATE INDEX idx_sistemi_ambiente ON sistemi_target(ambiente_id);
 CREATE INDEX idx_audit_log_timestamp ON audit_log(timestamp);
 
-INSERT INTO ambienti (nome) VALUES ('PRODUZIONE'), ('COLLAUDO'), ('SVILUPPO');
-INSERT INTO tecnologie (nome, descrizione) VALUES ('Oracle', 'Database Oracle'), ('MySQL', 'Database MySQL'), ('Postgres', 'Database PostgreSQL'), ('OCI', 'Oracle Cloud Infrastructure');
+INSERT INTO ambienti (nome) VALUES ('PRODUZIONE'), ('PREPRODUZIONE'), ('COLLAUDO'), ('SVILUPPO');
+INSERT INTO tecnologie (nome, descrizione) VALUES ('Oracle', 'Database Oracle'), ('MySQL', 'Database MySQL'), ('Postgres', 'Database PostgreSQL'), ('OCI', 'Oracle Cloud Infrastructure'), ('NoSQL', 'Database NoSQL (Cassandra/Couchbase)');
 INSERT INTO tipi_utenza (codice, descrizione) VALUES ('OBJ', 'Utenza Owner/Schema'), ('SV', 'Utenza Applicativa'), ('NOMINALE', 'Utenza Nominale Personale');
 
 RESET ROLE;
