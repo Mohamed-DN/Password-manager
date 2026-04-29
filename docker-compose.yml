@@ -1,19 +1,41 @@
 version: '3.8'
 
+# ---------------------------------------------------------------------------
+# Nexi Vault — docker-compose
+# Includes: primary DB + hot-standby replica + persistent Vault (Raft) +
+#           hourly backup service (pg_dump + vault snapshot)
+# ---------------------------------------------------------------------------
+
 services:
+
+  # =========================================================================
+  # PostgreSQL — PRIMARY
+  # =========================================================================
   postgres:
     image: postgres:16-alpine
     container_name: inventory-db
     environment:
       POSTGRES_DB: vault_inventory_db
-      # Questo è l'utente di root di servizio (lo usiamo solo per montare il container)
-      POSTGRES_PASSWORD: rootpassword123 
+      POSTGRES_PASSWORD: rootpassword123
+    # Enable WAL-level replication and archiving at startup
+    command: >
+      postgres
+      -c wal_level=replica
+      -c max_wal_senders=5
+      -c max_replication_slots=5
+      -c hot_standby=on
+      -c archive_mode=on
+      -c archive_command='test ! -f /var/lib/postgresql/wal_archive/%f && cp %p /var/lib/postgresql/wal_archive/%f'
+      -c wal_keep_size=1024
     ports:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-      # Questo script gira solo la prima volta che si crea il volume
-      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+      - postgres_wal_archive:/var/lib/postgresql/wal_archive
+      # 01: schema + seed data
+      - ./init.sql:/docker-entrypoint-initdb.d/01-init.sql
+      # 02: patch pg_hba.conf to allow replication connections
+      - ./scripts/init-primary.sh:/docker-entrypoint-initdb.d/02-init-primary.sh
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d vault_inventory_db"]
@@ -21,28 +43,66 @@ services:
       timeout: 5s
       retries: 5
 
+  # =========================================================================
+  # PostgreSQL — HOT STANDBY REPLICA (streaming replication)
+  # =========================================================================
+  postgres-replica:
+    image: postgres:16-alpine
+    container_name: inventory-db-replica
+    # Use a custom entrypoint that handles pg_basebackup on first start
+    entrypoint: ["/bin/bash", "/scripts/init-replica.sh"]
+    environment:
+      PGDATA: /var/lib/postgresql/data
+      POSTGRES_PASSWORD: rootpassword123
+      POSTGRES_DB: vault_inventory_db
+      PRIMARY_HOST: inventory-db
+      PRIMARY_PORT: 5432
+      REPLICATION_USER: replicator
+      REPLICATION_PASSWORD: ReplicaPassword123!
+    volumes:
+      - postgres_replica_data:/var/lib/postgresql/data
+      - ./scripts/init-replica.sh:/scripts/init-replica.sh:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d vault_inventory_db"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+
+  # =========================================================================
+  # OpenBao — Raft persistent storage (production mode, not dev mode)
+  # =========================================================================
   openbao:
-    # Usiamo l'immagine ufficiale di HashiCorp Vault come equivalente 1:1 API compatibile per lo sviluppo locale.
-    # In produzione su RedHat 9 userete i binari OpenBao nativi.
-    image: hashicorp/vault:latest 
+    build: ./vault
     container_name: inventory-bao
     ports:
       - "8200:8200"
+      - "8201:8201"
     environment:
       VAULT_ADDR: "http://127.0.0.1:8200"
-      VAULT_API_ADDR: "http://127.0.0.1:8200"
       SKIP_SETCAP: "1"
     cap_add:
       - IPC_LOCK
-    # Avviamo in modalità Sviluppo: Token Root="root", memoria RAM, niente Unseal manuale per comodità locale.
-    command: server -dev -dev-listen-address="0.0.0.0:8200" -dev-root-token-id="root"
+    volumes:
+      - vault_data:/vault/data
+      - vault_init:/vault/init
+      - ./vault/config/vault.hcl:/vault/config/vault.hcl:ro
     restart: unless-stopped
     healthcheck:
+      # vault status exits 0 only when initialised AND unsealed
       test: ["CMD", "vault", "status", "-address=http://127.0.0.1:8200"]
-      interval: 10s
+      interval: 5s
       timeout: 5s
-      retries: 5
+      retries: 30
+      start_period: 30s
 
+  # =========================================================================
+  # Backend API
+  # =========================================================================
   backend:
     build: ./backend
     container_name: inventory-api
@@ -55,14 +115,23 @@ services:
         condition: service_healthy
     environment:
       - VAULT_ADDR=http://inventory-bao:8200
-      - VAULT_TOKEN=root
+      # VAULT_TOKEN is intentionally left empty here so vault.py reads the
+      # dynamically generated root token from the vault_init volume.
+      - VAULT_TOKEN=
+      - VAULT_INIT_FILE=/vault/init/init.json
       - DB_HOST=inventory-db
       - DB_USER=inventory_app
       - DB_PASSWORD=PasswordBackend123!
       - DB_NAME=vault_inventory_db
       - DB_SCHEMA=inventory
+    volumes:
+      # Share the vault init file so the backend can read the root token
+      - vault_init:/vault/init:ro
     restart: unless-stopped
 
+  # =========================================================================
+  # Frontend
+  # =========================================================================
   frontend:
     image: node:22-alpine
     container_name: inventory-ui
@@ -76,5 +145,46 @@ services:
     command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
     restart: unless-stopped
 
+  # =========================================================================
+  # Backup — hourly pg_dump + hourly vault raft snapshot
+  # =========================================================================
+  backup:
+    build: ./backup
+    container_name: inventory-backup
+    depends_on:
+      postgres:
+        condition: service_healthy
+      openbao:
+        condition: service_healthy
+    environment:
+      - DB_HOST=inventory-db
+      - DB_PORT=5432
+      - DB_USER=inventory_app
+      - DB_PASSWORD=PasswordBackend123!
+      - DB_NAME=vault_inventory_db
+      - VAULT_ADDR=http://inventory-bao:8200
+      - VAULT_INIT_FILE=/vault/init/init.json
+      - BACKUP_ROOT=/backups
+      - RETENTION_DAYS=7
+    volumes:
+      - backups_data:/backups
+      - vault_init:/vault/init:ro
+      - postgres_wal_archive:/var/lib/postgresql/wal_archive:ro
+    restart: unless-stopped
+
+# ===========================================================================
+# Named Volumes
+# ===========================================================================
 volumes:
+  # Primary PostgreSQL data
   postgres_data:
+  # Hot-standby replica data
+  postgres_replica_data:
+  # WAL archive for PITR (point-in-time recovery)
+  postgres_wal_archive:
+  # Vault Raft storage (secrets persisted here)
+  vault_data:
+  # Vault init file: unseal keys + root token (protect this volume!)
+  vault_init:
+  # Backup output directory
+  backups_data:

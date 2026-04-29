@@ -1,0 +1,7 @@
+# backup/crontab
+# Cron schedule for the backup container.
+#
+# Format: minute hour day-of-month month day-of-week command
+#
+# Hourly backup: pg_dump + vault snapshot — runs at minute 0 of every hour.
+0 * * * * /usr/local/bin/backup.sh >> /var/log/backup.log 2>&1
