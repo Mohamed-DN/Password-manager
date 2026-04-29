@@ -1,0 +1,50 @@
+version: '3.8'
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: inventory-db
+    environment:
+      POSTGRES_DB: vault_inventory_db
+      # Questo è l'utente di root di servizio (lo usiamo solo per montare il container)
+      POSTGRES_PASSWORD: rootpassword123 
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Questo script gira solo la prima volta che si crea il volume
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    restart: unless-stopped
+
+  openbao:
+    # Usiamo l'immagine ufficiale di HashiCorp Vault come equivalente 1:1 API compatibile per lo sviluppo locale.
+    # In produzione su RedHat 9 userete i binari OpenBao nativi.
+    image: hashicorp/vault:latest 
+    container_name: inventory-bao
+    ports:
+      - "8200:8200"
+    environment:
+      VAULT_ADDR: "http://127.0.0.1:8200"
+      VAULT_API_ADDR: "http://127.0.0.1:8200"
+      SKIP_SETCAP: "1"
+    cap_add:
+      - IPC_LOCK
+    # Avviamo in modalità Sviluppo: Token Root="root", memoria RAM, niente Unseal manuale per comodità locale.
+    command: server -dev -dev-listen-address="0.0.0.0:8200" -dev-root-token-id="root"
+    restart: unless-stopped
+
+  backend:
+    build: ./backend
+    container_name: inventory-api
+    ports:
+      - "8000:8000"
+    depends_on:
+      - postgres
+      - openbao
+    environment:
+      - VAULT_ADDR=http://inventory-bao:8200
+      - VAULT_TOKEN=root
+    restart: unless-stopped
+
+volumes:
+  postgres_data:

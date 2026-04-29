@@ -1,0 +1,20 @@
+# Node
+node_modules/
+dist/
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.venv/
+
+# Docker
+.data/
+vault_data/
+db_data/
+
+# OS
+.DS_Store
+Thumbs.db
