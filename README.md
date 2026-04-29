@@ -8,8 +8,10 @@ Il sistema si basa su un'architettura a tre livelli (Frontend, Backend, Security
 
 1.  **Frontend (React + Vite)**: Un'interfaccia moderna e dinamica che si adatta alla tecnologia selezionata.
 2.  **Backend (FastAPI)**: Un ponte asincrono che orchestra i dati tra il database e la cassaforte dei segreti.
-3.  **Security Layer (OpenBao/Vault)**: Le password NON sono salvate nel database. Sono criptate e gestite da OpenBao (fork di HashiCorp Vault).
+3.  **Security Layer (OpenBao/Vault)**: Le password NON sono salvate nel database. Sono criptate e gestite da OpenBao (fork di HashiCorp Vault) con **Raft storage persistente** (nessun rischio di perdita dati al riavvio).
 4.  **Database (PostgreSQL)**: Utilizzato per i metadati strutturati e le configurazioni flessibili tramite il tipo di dato `JSONB`.
+5.  **Replica PostgreSQL**: Hot-standby in streaming replication per alta disponibilità e failover immediato.
+6.  **Backup automatico**: Container dedicato che esegue ogni ora `pg_dump` + snapshot Raft di Vault, con retention a 7 giorni.
 
 ## 📁 Struttura del Repository
 
@@ -24,7 +26,23 @@ Il sistema si basa su un'architettura a tre livelli (Frontend, Backend, Security
 │   ├── src/
 │   │   ├── App.tsx         # Dashboard principale e Form Dinamico Adattivo
 │   │   └── index.css       # Design System (Nexi Blue/Premium style)
-├── docker-compose.yml      # Orchestrazione dei container (API, DB, Vault)
+├── scripts/                # Script di inizializzazione infrastruttura
+│   ├── init-primary.sh     # Configura pg_hba.conf del primary per la replica
+│   └── init-replica.sh     # Entrypoint del replica: pg_basebackup + avvio standby
+├── vault/                  # Configurazione OpenBao in modalità produzione
+│   ├── Dockerfile          # Immagine vault con jq
+│   ├── entrypoint.sh       # Auto-init, auto-unseal e abilitazione KV v2
+│   └── config/vault.hcl    # Raft storage + listener config
+├── backup/                 # Container di backup schedulato
+│   ├── Dockerfile          # alpine + pg-client + vault-cli + jq + dcron
+│   ├── backup.sh           # pg_dump + vault raft snapshot + rotation
+│   └── crontab             # Esecuzione oraria
+├── docs/
+│   ├── database/           # Schema DB e sicurezza
+│   ├── security/           # Configurazione OpenBao
+│   └── backup/
+│       └── BACKUP_RESTORE.md  # Procedure di ripristino
+├── docker-compose.yml      # Orchestrazione completa (6 servizi)
 ├── init.sql                # Schema del database (Dati strutturati + JSONB)
 └── README.md               # Questa guida
 ```
@@ -72,8 +90,10 @@ Quando un utente clicca su "Reveal Password":
 4.  Accedi alle API (Swagger): `http://localhost:8000/docs`
 
 ## 🔒 Sicurezza
-- **Vault Token**: Attualmente in modalità dev (`root`). In produzione va sostituito con AppRole o token limitati.
+- **Vault Token**: In modalità produzione (Raft storage) il root token viene generato al primo avvio e salvato in `/vault/init/init.json` (volume Docker `vault_init`). Proteggere questo file con storage cifrato.
 - **Postgres**: Utilizza schemi separati (`inventory`) e permessi granulari per l'utente applicativo.
+- **Backup**: I backup vengono salvati nel volume `backups_data`. In produzione, copiare i backup anche su object storage off-site (es. OCI Object Storage, S3).
+- **Unseal Keys**: In produzione, distribuire le 5 unseal key tra 5 custodi diversi e non tenerne più di 3 (soglia) in un unico luogo.
 
 ---
 *Progettato per Nexi - Password Management Modernization*

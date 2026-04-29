@@ -5,6 +5,8 @@
 CREATE ROLE inventory_admin WITH LOGIN PASSWORD 'SuperSegretaAdmin123!';
 CREATE ROLE inventory_app WITH LOGIN PASSWORD 'PasswordBackend123!';
 CREATE ROLE inventory_read WITH LOGIN PASSWORD 'ReadPassword123!';
+-- Replication user for streaming standby (created by postgres superuser)
+CREATE ROLE replicator WITH REPLICATION LOGIN PASSWORD 'ReplicaPassword123!';
 
 -- 2. Schema
 CREATE SCHEMA inventory AUTHORIZATION inventory_admin;
