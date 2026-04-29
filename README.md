@@ -49,6 +49,16 @@ Il database utilizza uno schema dedicato chiamato `inventory` per separare i dat
 - Ogni **Utenza** è collegata a un **Sistema Target**, a un **Owner**, a un **Ticket** e a un **Ambiente**.
 - Questo modello permette di fare query complesse (es. "mostrami tutte le utenze Oracle in Produzione gestite da Fabio").
 
+### Configurazione & Ruoli:
+- **Ruoli Database**:
+  - `inventory_admin`: Ruolo DDL per la manutenzione dello schema e delle tabelle.
+  - `inventory_app`: Ruolo DML utilizzato dal Backend FastAPI per le operazioni quotidiane (sicurezza tramite principio del minor privilegio).
+- **Inizializzazione**: Lo schema viene creato automaticamente all'avvio tramite il file `init.sql` montato nel container Postgres.
+- **Parametri di Connessione**:
+  - Host: `inventory-db` (rete interna Docker)
+  - Port: `5432`
+  - DB Name: `vault_inventory_db`
+
 ## 🛠 Come sono collegati i componenti?
 
 ### 1. Il Flusso di Inserimento (Unified Entry)
