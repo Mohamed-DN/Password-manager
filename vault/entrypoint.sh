@@ -65,13 +65,16 @@ ROOT_TOKEN=$(jq -r '.root_token' "$INIT_FILE")
 export VAULT_TOKEN="$ROOT_TOKEN"
 
 # Check if the KV engine is already mounted; if not, enable it.
-VAULT_TOKEN="$ROOT_TOKEN" vault secrets list -address="$VAULT_ADDR" 2>/dev/null \
-    | grep -q "^secret/" \
-    || VAULT_TOKEN="$ROOT_TOKEN" vault secrets enable \
+if VAULT_TOKEN="$ROOT_TOKEN" vault secrets list -address="$VAULT_ADDR" 2>/dev/null | grep -q "^secret/"; then
+    echo "==> [vault-entrypoint] KV-v2 engine already mounted at 'secret/'."
+elif VAULT_TOKEN="$ROOT_TOKEN" vault secrets enable \
          -address="$VAULT_ADDR" \
          -version=2 \
-         -path=secret kv \
-    || true
+         -path=secret kv 2>/dev/null; then
+    echo "==> [vault-entrypoint] KV-v2 engine enabled at 'secret/'."
+else
+    echo "==> [vault-entrypoint] WARNING: could not enable KV-v2 engine (it may already exist or a snapshot was restored). Continuing."
+fi
 
 echo "==> [vault-entrypoint] Vault is ready."
 

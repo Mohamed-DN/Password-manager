@@ -166,10 +166,23 @@ services:
       - VAULT_INIT_FILE=/vault/init/init.json
       - BACKUP_ROOT=/backups
       - RETENTION_DAYS=7
+      # ---------------------------------------------------------------------------
+      # Offsite DR copy — set OFFSITE_HOST to enable rsync to a remote backup server.
+      # The backup container needs an SSH private key at OFFSITE_SSH_KEY (mount it
+      # as a Docker secret or read-only bind mount).
+      # ---------------------------------------------------------------------------
+      - OFFSITE_HOST=${OFFSITE_HOST:-}          # e.g. backup-server.company.it
+      - OFFSITE_PORT=${OFFSITE_PORT:-22}
+      - OFFSITE_USER=${OFFSITE_USER:-backup}
+      - OFFSITE_PATH=${OFFSITE_PATH:-/opt/nexi-vault-backups}
+      - OFFSITE_SSH_KEY=${OFFSITE_SSH_KEY:-/root/.ssh/id_rsa}
     volumes:
       - backups_data:/backups
       - vault_init:/vault/init:ro
       - postgres_wal_archive:/var/lib/postgresql/wal_archive:ro
+      # Mount the SSH private key for offsite rsync (optional — only needed when
+      # OFFSITE_HOST is configured). Example host-path bind:
+      #   - /etc/nexi-vault/ssh/id_rsa:/root/.ssh/id_rsa:ro
     restart: unless-stopped
 
 # ===========================================================================

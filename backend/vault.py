@@ -13,15 +13,28 @@ if not VAULT_TOKEN:
     if os.path.exists(_init_file):
         try:
             with open(_init_file) as _f:
-                VAULT_TOKEN = json.load(_f).get("root_token", "")
-            if not VAULT_TOKEN:
-                raise ValueError("root_token field is empty in Vault init file")
+                _raw = _f.read()
         except Exception as _e:
             raise RuntimeError(
-                f"Cannot read Vault root token from '{_init_file}': {_e}. "
+                f"Cannot read Vault init file '{_init_file}': {_e}."
+            ) from _e
+
+        try:
+            _data = json.loads(_raw)
+        except json.JSONDecodeError as _e:
+            raise RuntimeError(
+                f"Vault init file '{_init_file}' contains invalid JSON: {_e}. "
+                "Ensure the vault container has finished initialisation before "
+                "starting the backend."
+            ) from _e
+
+        VAULT_TOKEN = _data.get("root_token", "")
+        if not VAULT_TOKEN:
+            raise RuntimeError(
+                f"root_token field is empty in Vault init file '{_init_file}'. "
                 "Ensure the vault_init volume is mounted and the Vault container "
                 "has completed initialisation before starting the backend."
-            ) from _e
+            )
 
 # Inizializza il client hvac
 client = hvac.Client(url=VAULT_ADDR, token=VAULT_TOKEN)
