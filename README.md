@@ -29,6 +29,26 @@ Il sistema si basa su un'architettura a tre livelli (Frontend, Backend, Security
 └── README.md               # Questa guida
 ```
 
+## 🗄 Struttura del Database (PostgreSQL)
+
+Il database utilizza uno schema dedicato chiamato `inventory` per separare i dati di sistema da quelli di gestione.
+
+### Tabelle Principali:
+- **`sistemi_target`**: Rappresenta l'asset fisico/logico (es. un'istanza Oracle o un server MySQL).
+  - `configurazione (JSONB)`: Contiene i parametri tecnici variabili (porta, server, hba_conf).
+- **`utenze`**: Contiene le credenziali di accesso.
+  - `vault_path`: Il link univoco al segreto salvato in OpenBao.
+  - `attributi_specifici (JSONB)`: Metadati specifici dell'utente (es. host autorizzati).
+- **`ambienti`**: Lookup table per gli ambienti (SVILUPPO, COLLAUDO, PRODUZIONE).
+- **`tecnologie`**: Lookup table per le tecnologie (Oracle, MySQL, Postgres, OCI, NoSQL).
+- **`bao_owners`**: Responsabili dell'asset (Business Application Owners).
+- **`ticket`**: Tracciamento delle richieste tramite ID Ticket (es. IRxxxx).
+- **`audit_log`**: Registro immutabile di tutte le azioni critiche (visualizzazione e cambio password).
+
+### Relazioni:
+- Ogni **Utenza** è collegata a un **Sistema Target**, a un **Owner**, a un **Ticket** e a un **Ambiente**.
+- Questo modello permette di fare query complesse (es. "mostrami tutte le utenze Oracle in Produzione gestite da Fabio").
+
 ## 🛠 Come sono collegati i componenti?
 
 ### 1. Il Flusso di Inserimento (Unified Entry)
