@@ -39,14 +39,32 @@ if not VAULT_TOKEN:
 # Inizializza il client hvac
 client = hvac.Client(url=VAULT_ADDR, token=VAULT_TOKEN)
 
+
+def configure_kv_max_versions(max_versions: int = 200) -> None:
+    """
+    Configure the KV v2 mount to retain max_versions versions per secret.
+    Called once at application startup.
+
+    Why 200?  Password history is retained for 10 years.  Even with daily
+    password rotations that is only 3 650 versions.  200 covers most real
+    workloads while keeping memory usage minimal inside OpenBao.  Increase
+    if needed.
+
+    Note: this sets the *default* for new secrets.  Existing secrets keep
+    their per-path setting unless updated individually.
+    """
+    try:
+        client.secrets.kv.v2.configure(max_versions=max_versions)
+    except Exception as e:
+        print(f"Warning: Could not configure KV v2 max_versions: {e}")
+
+
 def store_password(vault_path: str, password: str) -> bool:
     """
     Salva la password in OpenBao nel percorso specificato.
-    Usa il motore KV v2.
+    Usa il motore KV v2 — ogni chiamata crea automaticamente una nuova versione.
     """
     try:
-        # vault_path tipico: "inventory/oracle/P1PDS2CBIP/PIPPO_SV"
-        # Il motore kv-v2 di default è montato su "secret"
         client.secrets.kv.v2.create_or_update_secret(
             path=vault_path,
             secret=dict(password=password)
@@ -56,13 +74,45 @@ def store_password(vault_path: str, password: str) -> bool:
         print(f"Errore scrittura Vault: {e}")
         return False
 
-def get_password(vault_path: str) -> str:
+
+def get_password(vault_path: str) -> str | None:
     """
-    Recupera la password da OpenBao usando il percorso.
+    Recupera la password corrente (ultima versione) da OpenBao.
     """
     try:
         read_response = client.secrets.kv.v2.read_secret_version(path=vault_path)
         return read_response['data']['data']['password']
     except Exception as e:
         print(f"Errore lettura Vault: {e}")
+        return None
+
+
+def get_current_vault_version(vault_path: str) -> int | None:
+    """
+    Ritorna il numero di versione corrente di un segreto in OpenBao KV v2.
+    Viene chiamato PRIMA di aggiornare la password, per salvare la versione
+    vecchia nello storico.
+    """
+    try:
+        meta = client.secrets.kv.v2.read_secret_metadata(path=vault_path)
+        return meta['data']['current_version']
+    except Exception as e:
+        print(f"Errore lettura metadati Vault: {e}")
+        return None
+
+
+def get_password_by_version(vault_path: str, version: int) -> str | None:
+    """
+    Recupera una versione specifica della password da OpenBao KV v2.
+    Usato per mostrare la password storica corrispondente a una voce
+    dello storico_password.
+    """
+    try:
+        read_response = client.secrets.kv.v2.read_secret_version(
+            path=vault_path,
+            version=version
+        )
+        return read_response['data']['data']['password']
+    except Exception as e:
+        print(f"Errore lettura versione {version} Vault: {e}")
         return None
