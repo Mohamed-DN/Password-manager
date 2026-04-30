@@ -1,14 +1,14 @@
 import asyncpg
 import json
+import os
 from contextlib import asynccontextmanager
 
-# In produzione queste andrebbero in variabili d'ambiente (.env)
-DB_USER = "inventory_app"
-DB_PASSWORD = "PasswordBackend123!"
-DB_HOST = "inventory-db" # Nome del container
-DB_PORT = "5432"
-DB_NAME = "vault_inventory_db"
-DB_SCHEMA = "inventory"
+DB_USER = os.getenv("DB_USER", "inventory_app")
+DB_PASSWORD = os.getenv("DB_PASSWORD", "PasswordBackend123!")
+DB_HOST = os.getenv("DB_HOST", "inventory-db")
+DB_PORT = os.getenv("DB_PORT", "5432")
+DB_NAME = os.getenv("DB_NAME", "vault_inventory_db")
+DB_SCHEMA = os.getenv("DB_SCHEMA", "inventory")
 
 class Database:
     def __init__(self):

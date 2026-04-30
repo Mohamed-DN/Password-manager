@@ -1,9 +1,21 @@
-version: '3.8'
-
 # ---------------------------------------------------------------------------
-# Nexi Vault — docker-compose
-# Includes: primary DB + hot-standby replica + persistent Vault (Raft) +
-#           hourly backup service (pg_dump + vault snapshot)
+# Nexi Vault — podman-compose.yml
+# Compatible with: podman-compose >= 1.0 OR docker compose v2 (drop-in)
+#
+# Key differences vs docker-compose.yml:
+#   • Full image registry paths (docker.io/...) — Podman has no implicit hub
+#   • Bind-mount paths carry `:z` (shared SELinux relabel) required on OCI /
+#     Oracle Linux hosts that run SELinux in enforcing mode
+#   • cap_add IPC_LOCK removed — vault.hcl already sets disable_mlock = true,
+#     which is the correct approach for container environments
+#   • OFFSITE_HOST pre-set to oemdb1 — the 40 TB gateway backup server
+#   • REPLICATION_MODE env var: set to 'sync' for synchronous replication,
+#     leave empty (default) for asynchronous
+#
+# Quick start (development / local):
+#   podman-compose up -d --build
+#
+# Production: use the Quadlet systemd units in podman/quadlets/ instead.
 # ---------------------------------------------------------------------------
 
 services:
@@ -12,12 +24,17 @@ services:
   # PostgreSQL — PRIMARY
   # =========================================================================
   postgres:
-    image: postgres:16-alpine
+    image: docker.io/postgres:16-alpine
     container_name: inventory-db
     environment:
       POSTGRES_DB: vault_inventory_db
       POSTGRES_PASSWORD: rootpassword123
-    # Enable WAL-level replication and archiving at startup
+      # Pass the replication mode to init-primary.sh so it can configure
+      # synchronous_standby_names when REPLICATION_MODE=sync.
+      REPLICATION_MODE: ${REPLICATION_MODE:-async}
+    # Enable WAL-level replication and archiving at startup.
+    # To switch to SYNCHRONOUS replication, set REPLICATION_MODE=sync in .env
+    # (init-primary.sh will write the required postgresql.conf entries).
     command: >
       postgres
       -c wal_level=replica
@@ -32,10 +49,9 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - postgres_wal_archive:/var/lib/postgresql/wal_archive
-      # 01: schema + seed data
-      - ./init.sql:/docker-entrypoint-initdb.d/01-init.sql
-      # 02: patch pg_hba.conf to allow replication connections
-      - ./scripts/init-primary.sh:/docker-entrypoint-initdb.d/02-init-primary.sh
+      # :z — shared SELinux label needed on Oracle Linux / RHEL hosts
+      - ./init.sql:/docker-entrypoint-initdb.d/01-init.sql:z,ro
+      - ./scripts/init-primary.sh:/docker-entrypoint-initdb.d/02-init-primary.sh:z,ro
     restart: unless-stopped
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres -d vault_inventory_db"]
@@ -45,11 +61,12 @@ services:
 
   # =========================================================================
   # PostgreSQL — HOT STANDBY REPLICA (streaming replication)
+  # Replication mode (sync/async) is controlled via REPLICATION_MODE on the
+  # primary — the standby configuration is the same in both cases.
   # =========================================================================
   postgres-replica:
-    image: postgres:16-alpine
+    image: docker.io/postgres:16-alpine
     container_name: inventory-db-replica
-    # Use a custom entrypoint that handles pg_basebackup on first start
     entrypoint: ["/bin/bash", "/scripts/init-replica.sh"]
     environment:
       PGDATA: /var/lib/postgresql/data
@@ -61,7 +78,7 @@ services:
       REPLICATION_PASSWORD: ReplicaPassword123!
     volumes:
       - postgres_replica_data:/var/lib/postgresql/data
-      - ./scripts/init-replica.sh:/scripts/init-replica.sh:ro
+      - ./scripts/init-replica.sh:/scripts/init-replica.sh:z,ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -74,7 +91,19 @@ services:
       start_period: 60s
 
   # =========================================================================
-  # OpenBao — Raft persistent storage (production mode, not dev mode)
+  # OpenBao — Raft persistent storage (production mode)
+  #
+  # NOTE ON HIGH AVAILABILITY:
+  #   OpenBao uses the Raft consensus algorithm for its internal storage.
+  #   A true Raft HA cluster requires at minimum 3 nodes on 3 SEPARATE hosts
+  #   (to survive a host failure).  On a single OCI host, running 3 OpenBao
+  #   containers provides no real availability benefit — if the host dies,
+  #   all 3 go down together.
+  #   The HA strategy here is therefore:
+  #     1. Hourly Raft snapshots copied to oemdb1:/backup/nexi-vault-backups/
+  #     2. vault_init/init.json (unseal keys) also copied to oemdb1 every hour
+  #     3. Documented restore procedure (Scenario C / D in DDR document)
+  #   Recovery time: < 10 minutes, data loss: max 1 hour.
   # =========================================================================
   openbao:
     build: ./vault
@@ -85,15 +114,14 @@ services:
     environment:
       VAULT_ADDR: "http://127.0.0.1:8200"
       SKIP_SETCAP: "1"
-    cap_add:
-      - IPC_LOCK
+    # IPC_LOCK is NOT added — vault.hcl sets disable_mlock = true which is
+    # the correct approach for containerised deployments.
     volumes:
       - vault_data:/vault/data
       - vault_init:/vault/init
-      - ./vault/config/vault.hcl:/vault/config/vault.hcl:ro
+      - ./vault/config/vault.hcl:/vault/config/vault.hcl:z,ro
     restart: unless-stopped
     healthcheck:
-      # vault status exits 0 only when initialised AND unsealed
       test: ["CMD", "vault", "status", "-address=http://127.0.0.1:8200"]
       interval: 5s
       timeout: 5s
@@ -115,8 +143,6 @@ services:
         condition: service_healthy
     environment:
       - VAULT_ADDR=http://inventory-bao:8200
-      # VAULT_TOKEN is intentionally left empty here so vault.py reads the
-      # dynamically generated root token from the vault_init volume.
       - VAULT_TOKEN=
       - VAULT_INIT_FILE=/vault/init/init.json
       - DB_HOST=inventory-db
@@ -125,7 +151,6 @@ services:
       - DB_NAME=vault_inventory_db
       - DB_SCHEMA=inventory
     volumes:
-      # Share the vault init file so the backend can read the root token
       - vault_init:/vault/init:ro
     restart: unless-stopped
 
@@ -133,11 +158,11 @@ services:
   # Frontend
   # =========================================================================
   frontend:
-    image: node:22-alpine
+    image: docker.io/node:22-alpine
     container_name: inventory-ui
     working_dir: /app
     volumes:
-      - ./frontend:/app
+      - ./frontend:/app:z
     ports:
       - "5173:5173"
     depends_on:
@@ -146,7 +171,7 @@ services:
     restart: unless-stopped
 
   # =========================================================================
-  # Backup — hourly pg_dump + hourly vault raft snapshot
+  # Backup — hourly pg_dump + hourly vault raft snapshot + rsync to oemdb1
   # =========================================================================
   backup:
     build: ./backup
@@ -166,38 +191,35 @@ services:
       - VAULT_INIT_FILE=/vault/init/init.json
       - BACKUP_ROOT=/backups
       - RETENTION_DAYS=7
-      # ---------------------------------------------------------------------------
-      # Offsite DR copy — set OFFSITE_HOST to enable rsync to a remote backup server.
-      # The backup container needs an SSH private key at OFFSITE_SSH_KEY (mount it
-      # as a Docker secret or read-only bind mount).
-      # ---------------------------------------------------------------------------
-      - OFFSITE_HOST=${OFFSITE_HOST:-}          # e.g. backup-server.company.it
+      # -----------------------------------------------------------------------
+      # Offsite DR copy — push backups to oemdb1 via rsync/SSH every hour.
+      # OFFSITE_HOST is pre-configured for the oemdb1 gateway server.
+      # Mount the SSH private key at OFFSITE_SSH_KEY (see volumes below).
+      # -----------------------------------------------------------------------
+      - OFFSITE_HOST=${OFFSITE_HOST:-oemdb1}
       - OFFSITE_PORT=${OFFSITE_PORT:-22}
       - OFFSITE_USER=${OFFSITE_USER:-backup}
-      - OFFSITE_PATH=${OFFSITE_PATH:-/opt/nexi-vault-backups}
+      - OFFSITE_PATH=${OFFSITE_PATH:-/backup/nexi-vault-backups}
       - OFFSITE_SSH_KEY=${OFFSITE_SSH_KEY:-/root/.ssh/id_rsa}
+      # Set to /root/.ssh/known_hosts (after running podman/setup-offsite-ssh.sh)
+      - OFFSITE_SSH_KNOWN_HOSTS=${OFFSITE_SSH_KNOWN_HOSTS:-}
     volumes:
       - backups_data:/backups
       - vault_init:/vault/init:ro
       - postgres_wal_archive:/var/lib/postgresql/wal_archive:ro
-      # Mount the SSH private key for offsite rsync (optional — only needed when
-      # OFFSITE_HOST is configured). Example host-path bind:
-      #   - /etc/nexi-vault/ssh/id_rsa:/root/.ssh/id_rsa:ro
+      # SSH private key for rsync to oemdb1 — generate with setup-offsite-ssh.sh
+      # Uncomment and adjust the host path once the key is generated:
+      #   - /opt/nexi-vault/ssh/id_rsa:/root/.ssh/id_rsa:z,ro
+      #   - /opt/nexi-vault/ssh/known_hosts:/root/.ssh/known_hosts:z,ro
     restart: unless-stopped
 
 # ===========================================================================
 # Named Volumes
 # ===========================================================================
 volumes:
-  # Primary PostgreSQL data
   postgres_data:
-  # Hot-standby replica data
   postgres_replica_data:
-  # WAL archive for PITR (point-in-time recovery)
   postgres_wal_archive:
-  # Vault Raft storage (secrets persisted here)
   vault_data:
-  # Vault init file: unseal keys + root token (protect this volume!)
   vault_init:
-  # Backup output directory
   backups_data:

@@ -5,6 +5,8 @@
 CREATE ROLE inventory_admin WITH LOGIN PASSWORD 'SuperSegretaAdmin123!';
 CREATE ROLE inventory_app WITH LOGIN PASSWORD 'PasswordBackend123!';
 CREATE ROLE inventory_read WITH LOGIN PASSWORD 'ReadPassword123!';
+-- Replication user for streaming standby (created by postgres superuser)
+CREATE ROLE replicator WITH REPLICATION LOGIN PASSWORD 'ReplicaPassword123!';
 
 -- 2. Schema
 CREATE SCHEMA inventory AUTHORIZATION inventory_admin;
@@ -57,7 +59,7 @@ CREATE TABLE bao_owners (
     id          INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     nome        VARCHAR(100) NOT NULL,
     cognome     VARCHAR(100) NOT NULL,
-    email       VARCHAR(200),
+    email       VARCHAR(200) UNIQUE,
     matricola   VARCHAR(20)
 );
 
@@ -103,6 +105,8 @@ CREATE TABLE utenze (
     created_by          VARCHAR(100),
     created_at          TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
     updated_at          TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+    -- Soft-delete: NULL = utenza attiva, non-NULL = cancellata logicamente
+    deleted_at          TIMESTAMPTZ,
 
     CONSTRAINT fk_utenze_sistema FOREIGN KEY (sistema_target_id) REFERENCES sistemi_target(id) ON DELETE RESTRICT,
     CONSTRAINT fk_utenze_tipo FOREIGN KEY (tipo_utenza_id) REFERENCES tipi_utenza(id) ON DELETE RESTRICT,
@@ -115,7 +119,36 @@ CREATE TRIGGER set_timestamp_utenze
     BEFORE UPDATE ON utenze
     FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
 
--- 7. AUDIT LOG (Fondamentale per sistemi critici)
+-- 7. STORICO PASSWORD
+-- Registra ogni modifica di password e ogni cancellazione di utenza.
+-- Retensione: 10 anni (nessuna cancellazione automatica; gestire con un job periodico
+-- che esegue DELETE FROM storico_password WHERE created_at < NOW() - INTERVAL '10 years').
+-- La password NON è salvata qui: è recuperabile da OpenBao usando vault_path + vault_version.
+-- OpenBao KV v2 tiene più versioni per segreto (configurato a 200 versioni al startup).
+CREATE TABLE storico_password (
+    id              INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+    utenza_id       INTEGER NOT NULL,
+    -- Denormalizzati per permettere la consultazione anche dopo cancellazione
+    username        VARCHAR(150) NOT NULL,
+    sistema_nome    VARCHAR(150) NOT NULL,
+    vault_path      VARCHAR(500) NOT NULL,
+    -- Numero di versione in OpenBao KV v2; NULL per la voce di cancellazione finale
+    vault_version   INTEGER,
+    -- 'MODIFICA_PASSWORD' | 'CANCELLAZIONE'
+    azione          VARCHAR(30) NOT NULL,
+    eseguito_da     VARCHAR(100),
+    note            TEXT,
+    created_at      TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT fk_storico_utenza FOREIGN KEY (utenza_id) REFERENCES utenze(id) ON DELETE RESTRICT,
+    CONSTRAINT chk_storico_azione CHECK (azione IN ('MODIFICA_PASSWORD', 'CANCELLAZIONE'))
+);
+
+CREATE INDEX idx_storico_utenza   ON storico_password(utenza_id);
+CREATE INDEX idx_storico_created  ON storico_password(created_at);
+CREATE INDEX idx_storico_azione   ON storico_password(azione);
+
+-- 8. AUDIT LOG (Fondamentale per sistemi critici)
 CREATE TABLE audit_log (
     id              INT GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
     timestamp       TIMESTAMPTZ DEFAULT CURRENT_TIMESTAMP,
@@ -125,7 +158,7 @@ CREATE TABLE audit_log (
     ip_address      VARCHAR(45)
 );
 
--- 8. INDICI E POPOLAMENTO BASE
+-- 9. INDICI E POPOLAMENTO BASE
 CREATE INDEX idx_sistemi_configurazione ON sistemi_target USING GIN (configurazione);
 CREATE INDEX idx_utenze_attributi ON utenze USING GIN (attributi_specifici);
 CREATE INDEX idx_utenze_sistema ON utenze(sistema_target_id);
