@@ -16,7 +16,7 @@ This document explains the backup strategy implemented for Nexi Vault and provid
 
 ## Storage Layout
 
-Backups are written to the Docker volume `backups_data`, mounted at `/backups` inside the `backup` container:
+Backups are written to the Podman volume `backups_data`, mounted at `/backups` inside the `backup` container:
 
 ```
 /backups/
@@ -26,7 +26,7 @@ Backups are written to the Docker volume `backups_data`, mounted at `/backups` i
     └── vault_snapshot_YYYYMMDD_HHMMSS.snap  (Raft binary snapshot)
 ```
 
-Vault unseal keys and root token are stored in the `vault_init` Docker volume, mounted at `/vault/init/init.json`. **Back up this file separately and keep it in a secure location (e.g. an encrypted offline vault).**
+Vault unseal keys and root token are stored in the `vault_init` Podman volume, mounted at `/vault/init/init.json`. **Back up this file separately and keep it in a secure location (e.g. an encrypted offline vault).**
 
 ---
 
@@ -38,15 +38,15 @@ Use this when you need to roll back to a specific backup file.
 
 ```bash
 # 1. Identify the backup file you want to restore
-docker exec inventory-backup ls /backups/postgres/
+podman exec inventory-backup ls /backups/postgres/
 
 # 2. Drop and recreate the database (run from the postgres primary container)
-docker exec -it inventory-db bash -c \
+podman exec -it inventory-db bash -c \
   "PGPASSWORD=rootpassword123 dropdb -U postgres vault_inventory_db && \
    PGPASSWORD=rootpassword123 createdb -U postgres vault_inventory_db"
 
 # 3. Restore the schema and data
-docker exec -it inventory-backup bash -c \
+podman exec -it inventory-backup bash -c \
   "PGPASSWORD=rootpassword123 pg_restore \
      -h inventory-db \
      -U postgres \
@@ -55,7 +55,7 @@ docker exec -it inventory-backup bash -c \
      /backups/postgres/pg_backup_YYYYMMDD_HHMMSS.dump"
 
 # 4. Re-apply roles and permissions (they are not included in pg_dump by default)
-docker exec -it inventory-db bash -c \
+podman exec -it inventory-db bash -c \
   "PGPASSWORD=rootpassword123 psql -U postgres vault_inventory_db \
    -f /docker-entrypoint-initdb.d/init.sql"
 ```
@@ -66,16 +66,16 @@ Use this when the primary is down and you need the replica to take over immediat
 
 ```bash
 # 1. Stop the backup and backend services to prevent writes
-docker compose stop backup backend
+podman-compose -f podman-compose.yml stop backup backend
 
 # 2. Promote the replica to a primary
-docker exec inventory-db-replica bash -c \
+podman exec inventory-db-replica bash -c \
   "PGDATA=/var/lib/postgresql/data pg_ctl promote -D /var/lib/postgresql/data"
 
 # 3. Update the backend to point to the replica
-#    Edit docker-compose.yml: change DB_HOST to inventory-db-replica
+#    Edit podman-compose.yml: change DB_HOST to inventory-db-replica
 #    Then restart the backend:
-docker compose up -d backend
+podman-compose -f podman-compose.yml up -d backend
 
 # 4. Rebuild a new replica from the promoted primary once the old primary is repaired
 ```
@@ -86,13 +86,13 @@ Use this to recover to a specific point in time using the archived WAL files.
 
 ```bash
 # 1. Stop the primary postgres container
-docker compose stop postgres
+podman-compose -f podman-compose.yml stop postgres
 
 # 2. Get a shell on the postgres container and prepare a recovery target
-docker run --rm \
+podman run --rm \
   -v postgres_data:/var/lib/postgresql/data \
   -v postgres_wal_archive:/var/lib/postgresql/wal_archive \
-  postgres:16-alpine bash -c "
+  docker.io/postgres:16-alpine bash -c "
     # Add recovery target time to postgresql.conf
     echo \"recovery_target_time = '2024-01-15 14:30:00'\" >> /var/lib/postgresql/data/postgresql.conf
     echo \"restore_command = 'cp /var/lib/postgresql/wal_archive/%f %p'\" >> /var/lib/postgresql/data/postgresql.conf
@@ -101,7 +101,7 @@ docker run --rm \
   "
 
 # 3. Start postgres — it will replay WAL up to the target time
-docker compose up -d postgres
+podman-compose -f podman-compose.yml up -d postgres
 ```
 
 ---
@@ -112,44 +112,44 @@ docker compose up -d postgres
 
 ```bash
 # 1. Identify the snapshot to restore
-docker exec inventory-backup ls /backups/vault/
+podman exec inventory-backup ls /backups/vault/
 
 # 2. Read the root token from the init file
-ROOT_TOKEN=$(docker exec inventory-bao \
+ROOT_TOKEN=$(podman exec inventory-bao \
   sh -c "jq -r '.root_token' /vault/init/init.json")
 
 # 3. Restore the snapshot (Vault must be running and unsealed)
-docker exec inventory-backup sh -c \
+podman exec inventory-backup sh -c \
   "VAULT_TOKEN=${ROOT_TOKEN} vault operator raft snapshot restore \
      -address=http://inventory-bao:8200 \
      -force \
      /backups/vault/vault_snapshot_YYYYMMDD_HHMMSS.snap"
 
 # 4. Restart the vault container to pick up the restored state
-docker compose restart openbao
+podman-compose -f podman-compose.yml restart openbao
 ```
 
 ### Full recovery from scratch (disaster scenario)
 
 ```bash
 # 1. Delete vault data and init volumes
-docker volume rm password-manager_vault_data password-manager_vault_init
+podman volume rm password-manager_vault_data password-manager_vault_init
 
 # 2. Restart vault — it will re-initialise and write a new init.json
-docker compose up -d openbao
+podman-compose -f podman-compose.yml up -d openbao
 
 # 3. Wait for vault to be healthy, then restore the snapshot
 #    (get new root token from the freshly written init.json)
-ROOT_TOKEN=$(docker exec inventory-bao sh -c "jq -r '.root_token' /vault/init/init.json")
+ROOT_TOKEN=$(podman exec inventory-bao sh -c "jq -r '.root_token' /vault/init/init.json")
 
-docker exec inventory-backup sh -c \
+podman exec inventory-backup sh -c \
   "VAULT_TOKEN=${ROOT_TOKEN} vault operator raft snapshot restore \
      -address=http://inventory-bao:8200 \
      -force \
      /backups/vault/vault_snapshot_YYYYMMDD_HHMMSS.snap"
 
 # 4. Restart everything
-docker compose restart
+podman-compose -f podman-compose.yml restart
 ```
 
 ---
@@ -158,17 +158,17 @@ docker compose restart
 
 Run a manual backup at any time:
 ```bash
-docker exec inventory-backup /usr/local/bin/backup.sh
+podman exec inventory-backup /usr/local/bin/backup.sh
 ```
 
 Check backup logs:
 ```bash
-docker exec inventory-backup cat /var/log/backup.log
+podman exec inventory-backup cat /var/log/backup.log
 ```
 
 List current backups:
 ```bash
-docker exec inventory-backup ls -lh /backups/postgres/ /backups/vault/
+podman exec inventory-backup ls -lh /backups/postgres/ /backups/vault/
 ```
 
 ---
@@ -178,4 +178,4 @@ docker exec inventory-backup ls -lh /backups/postgres/ /backups/vault/
 1. **Vault init.json** contains the unseal keys and root token in plain text. Mount the `vault_init` volume on encrypted storage in production and never commit it to version control.
 2. In production, replace the root token with a short-lived AppRole token and rotate the root token.
 3. Enable TLS (`tls_disable = 0`) in `vault/config/vault.hcl` and provide a certificate.
-4. Copy backups to off-site / object storage (S3, OCI Object Storage) for true disaster recovery.
+4. Copy backups to off-site storage (oemdb1:/backup, OCI Object Storage) for true disaster recovery. See `docs/PODMAN_PRODUCTION_GUIDE.md` for the full recovery procedure.
