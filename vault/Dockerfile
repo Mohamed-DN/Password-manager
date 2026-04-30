@@ -3,6 +3,7 @@
 # to parse the init.json file for unseal keys and the root token).
 FROM hashicorp/vault:latest
 
+USER root
 RUN apk add --no-cache jq
 
 COPY entrypoint.sh /usr/local/bin/vault-entrypoint.sh

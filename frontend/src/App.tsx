@@ -78,6 +78,7 @@ function App() {
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState<boolean>(false)
   const [activeTab, setActiveTab] = useState<'inventory' | 'audit' | 'old'>('inventory')
+  const [searchTerm, setSearchTerm] = useState('')
   
   // Password history state
   const [passwordHistory, setPasswordHistory] = useState<PasswordHistoryEntry[]>([])
@@ -282,7 +283,12 @@ function App() {
         <header className="main-header">
           <div className="header-search">
             <Search size={18} />
-            <input type="text" placeholder="Search systems, tickets, users..." />
+            <input 
+              type="text" 
+              placeholder="Search systems, tickets, users..." 
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+            />
           </div>
           <button className="btn-primary" onClick={() => setShowModal(true)}>
             <Plus size={18} /> New Entry
@@ -291,8 +297,15 @@ function App() {
 
         <div className="content-scroll">
           <div className="page-intro">
-            <h1>{activeTab === 'inventory' ? 'Asset Inventory' : 'Audit Logs'}</h1>
-            <p>{activeTab === 'inventory' ? 'Enterprise database credentials management with HashiCorp Vault encryption.' : 'Track every access and operation on sensitive credentials.'}</p>
+            <h1>
+              {activeTab === 'inventory' ? 'Asset Inventory' : 
+               activeTab === 'audit' ? 'Audit Logs' : 'Old / Password History'}
+            </h1>
+            <p>
+              {activeTab === 'inventory' ? 'Enterprise database credentials management with HashiCorp Vault encryption.' : 
+               activeTab === 'audit' ? 'Track every access and operation on sensitive credentials.' : 
+               'Review history of rotated or deleted passwords.'}
+            </p>
           </div>
 
           {activeTab === 'inventory' && (
@@ -308,7 +321,14 @@ function App() {
                 </tr>
               </thead>
               <tbody>
-                {utenze.map(u => {
+                {utenze
+                  .filter(u => {
+                    const s = getSys(u.sistema_target_id);
+                    const match = u.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
+                                s?.nome_sistema.toLowerCase().includes(searchTerm.toLowerCase());
+                    return match;
+                  })
+                  .map(u => {
                   const s = getSys(u.sistema_target_id)
                   const tName = getTechName(s?.tecnologia_id || 0)
                   const eName = getEnvName(s?.ambiente_id || 0)
@@ -357,7 +377,9 @@ function App() {
                 {auditLogs.length === 0 && (
                   <tr><td colSpan={5} style={{textAlign:'center', padding:'2rem', color:'var(--text-muted)'}}>No audit log entries yet.</td></tr>
                 )}
-                {auditLogs.map(log => (
+                {auditLogs
+                  .filter(log => JSON.stringify(log).toLowerCase().includes(searchTerm.toLowerCase()))
+                  .map(log => (
                   <tr key={log.id}>
                     <td><code className="code-path">{new Date(log.timestamp).toLocaleString()}</code></td>
                     <td>{log.utente_operatore}</td>
@@ -384,17 +406,15 @@ function App() {
                 </tr>
               </thead>
               <tbody>
-                {deletedUtenze.length === 0 && (
-                  <tr><td colSpan={4} style={{textAlign:'center', padding:'2rem', color:'var(--text-muted)'}}>No deleted users found.</td></tr>
-                )}
-                {deletedUtenze.map(u => {
+                {deletedUtenze
+                  .filter(u => u.username.toLowerCase().includes(searchTerm.toLowerCase()))
+                  .map(u => {
                   const s = getSys(u.sistema_target_id)
                   return (
                     <tr 
                       key={u.id} 
                       onClick={() => {
                         setSelectedDeletedUtenza(u)
-                        setPasswordHistory([])
                         fetchPasswordHistory(u.id)
                       }} 
                       className={selectedDeletedUtenza?.id === u.id ? 'selected' : ''}
@@ -408,6 +428,59 @@ function App() {
                 })}
               </tbody>
             </table>
+
+            {/* Password History Section */}
+            {selectedDeletedUtenza && (
+              <div className="history-details animate-in" style={{marginTop: '2rem', padding: '1.5rem', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0'}}>
+                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1.5rem'}}>
+                  <h3 style={{color: 'var(--text-main)', display:'flex', alignItems:'center', gap:'8px'}}>
+                    <Activity size={18} color="var(--accent)"/> 
+                    Password History for {selectedDeletedUtenza.username}
+                  </h3>
+                  <button className="close-btn" onClick={() => setSelectedDeletedUtenza(null)}><X size={16}/></button>
+                </div>
+
+                {passwordHistory.length === 0 ? (
+                  <p style={{color: 'var(--text-muted)'}}>Loading history...</p>
+                ) : (
+                  <div className="history-list">
+                    {passwordHistory.map((h, idx) => (
+                      <div key={h.id} className="history-item" style={{
+                        padding: '1rem', 
+                        background: 'white', 
+                        borderRadius: '8px', 
+                        marginBottom: '0.75rem', 
+                        border: '1px solid #e2e8f0',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
+                      }}>
+                        <div style={{display:'flex', justifyContent:'space-between', marginBottom: '0.5rem'}}>
+                          <span className={`tag ${h.azione === 'CANCELLAZIONE' ? 'env-produzione' : 'env-sviluppo'}`} style={{fontSize:'0.7rem'}}>
+                            {h.azione}
+                          </span>
+                          <span style={{fontSize: '0.75rem', color: 'var(--text-muted)'}}>{new Date(h.created_at).toLocaleString()}</span>
+                        </div>
+                        <div style={{display:'flex', alignItems:'center', justifyContent:'space-between'}}>
+                          <div>
+                            <div style={{fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)'}}>
+                              {h.azione === 'CANCELLAZIONE' ? 'Final State at Deletion' : `Version #${h.vault_version}`}
+                            </div>
+                            {h.password && (
+                              <div className="secret-card" style={{marginTop:'0.5rem', padding:'4px 8px', background:'#f1f5f9'}}>
+                                <code style={{fontSize:'0.9rem', color:'var(--accent)', fontWeight:600}}>{h.password}</code>
+                                <button onClick={() => navigator.clipboard.writeText(h.password || '')} style={{padding:'2px', marginLeft:'8px'}}><Copy size={12}/></button>
+                              </div>
+                            )}
+                          </div>
+                          <div style={{textAlign:'right', fontSize: '0.75rem', color: 'var(--text-muted)'}}>
+                            By {h.eseguito_da}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
           )}
         </div>
