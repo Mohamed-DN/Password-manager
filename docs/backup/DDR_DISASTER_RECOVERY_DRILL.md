@@ -103,11 +103,11 @@ Verificare che il team sia in grado di ripristinare il servizio **Nexi Vault Inv
 
 Prima di eseguire qualsiasi scenario di test, verificare:
 
-- [ ] L'operatore ha accesso `sudo` / `docker` sul server host
-- [ ] Il server DR (backup remoto) è raggiungibile via SSH
-- [ ] Esiste almeno un pg_dump valido in `/opt/nexi-vault-backups/postgres/` sul server DR
-- [ ] Esiste almeno uno snapshot Vault valido in `/opt/nexi-vault-backups/vault/` sul server DR
-- [ ] Esiste una copia di `init.json` in `/opt/nexi-vault-backups/vault-init/` sul server DR
+- [ ] L'operatore ha accesso `sudo` / `podman` sul server host (Podman ≥ 4.0 installato)
+- [ ] Il server DR (oemdb1) è raggiungibile via SSH (backup@oemdb1)
+- [ ] Esiste almeno un pg_dump valido in `/backup/nexi-vault-backups/postgres/` su oemdb1
+- [ ] Esiste almeno uno snapshot Vault valido in `/backup/nexi-vault-backups/vault/` su oemdb1
+- [ ] Esiste una copia di `init.json` in `/backup/nexi-vault-backups/vault-init/` su oemdb1
 - [ ] Il drill viene eseguito su un ambiente di test, **MAI direttamente in produzione**
 - [ ] Tutti i membri del team coinvolti sono disponibili per tutta la durata del test
 - [ ] Viene mantenuto un log scritto di ogni azione con orario (usare la tabella Log in fondo)
@@ -127,14 +127,14 @@ Prima di eseguire qualsiasi scenario di test, verificare:
 CONTAINER=inventory-api
 
 # 2. Registrare lo stato corrente
-docker ps | grep $CONTAINER
+podman ps | grep $CONTAINER
 
 # 3. Simulare il crash
-docker kill $CONTAINER
+podman kill $CONTAINER
 
 # 4. Attendere il riavvio automatico
 sleep 15
-docker ps | grep $CONTAINER   # deve mostrare "Up X seconds"
+podman ps | grep $CONTAINER   # deve mostrare "Up X seconds"
 
 # 5. Verificare che il servizio risponda
 curl -f http://localhost:8000/health || echo "ATTENZIONE: backend non risponde"
@@ -159,7 +159,7 @@ curl -f http://localhost:8000/health || echo "ATTENZIONE: backend non risponde"
 
 ```bash
 # Sul container primary: verificare stato replication
-docker exec inventory-db \
+podman exec inventory-db \
   psql -U postgres -c "SELECT client_addr, state, sent_lsn, write_lsn, replay_lsn, sync_state FROM pg_stat_replication;"
 ```
 
@@ -171,26 +171,26 @@ Esito verifica: ___________  Ora: ___________
 
 ```bash
 # Fermare il primary in modo brutale (simula host down)
-docker kill inventory-db
-docker rm inventory-db
+podman kill inventory-db
+podman rm inventory-db
 
 # Verificare che il backend si accorga del guasto
-docker logs inventory-api --tail=20
+podman logs inventory-api --tail=20
 ```
 
 ### Fase B.3 — Promozione della replica
 
 ```bash
 # 1. Fermare i servizi che scrivono sul DB
-docker compose stop backup backend
+podman-compose -f podman-compose.yml stop backup backend
 
 # 2. Promuovere la replica a primary
-docker exec inventory-db-replica \
+podman exec inventory-db-replica \
   bash -c "pg_ctl promote -D /var/lib/postgresql/data"
 
 # 3. Attendere la promozione (al massimo 30 secondi)
 sleep 10
-docker exec inventory-db-replica \
+podman exec inventory-db-replica \
   psql -U postgres -c "SELECT pg_is_in_recovery();"
 # Deve restituire: f (false) → il nodo è diventato primary
 ```
@@ -200,11 +200,11 @@ docker exec inventory-db-replica \
 ### Fase B.4 — Redirigere il backend sulla replica
 
 ```bash
-# Modificare docker-compose.yml: cambiare DB_HOST da inventory-db a inventory-db-replica
-sed -i 's/DB_HOST=inventory-db/DB_HOST=inventory-db-replica/' docker-compose.yml
+# Modificare podman-compose.yml: cambiare DB_HOST da inventory-db a inventory-db-replica
+sed -i 's/DB_HOST=inventory-db/DB_HOST=inventory-db-replica/' podman-compose.yml
 
 # Riavviare il backend
-docker compose up -d backend
+podman-compose -f podman-compose.yml up -d backend
 
 # Verificare
 curl -f http://localhost:8000/health
@@ -213,11 +213,11 @@ curl -f http://localhost:8000/health
 ### Fase B.5 — Verifica integrità dati
 
 ```bash
-docker exec inventory-db-replica \
+podman exec inventory-db-replica \
   psql -U postgres -d vault_inventory_db \
   -c "SELECT count(*) FROM inventory.utenze;"
 
-docker exec inventory-db-replica \
+podman exec inventory-db-replica \
   psql -U postgres -d vault_inventory_db \
   -c "SELECT count(*) FROM inventory.sistemi_target;"
 ```
@@ -236,16 +236,16 @@ Conteggi post-recovery:
 
 ```bash
 # Ricreare il primary dal nuovo primary (ex-replica)
-# 1. Ripristinare DB_HOST nel docker-compose.yml
-sed -i 's/DB_HOST=inventory-db-replica/DB_HOST=inventory-db/' docker-compose.yml
+# 1. Ripristinare DB_HOST nel podman-compose.yml
+sed -i 's/DB_HOST=inventory-db-replica/DB_HOST=inventory-db/' podman-compose.yml
 
 # 2. Eliminare il volume del vecchio primary e ricreare il container
-docker volume rm password-manager_postgres_data || true
-docker compose up -d postgres
+podman volume rm password-manager_postgres_data || true
+podman-compose -f podman-compose.yml up -d postgres
 
 # Il primary nuovo riprende i dati dalla replica (pg_basebackup nella init-replica.sh)
-docker compose up -d postgres-replica
-docker compose up -d backup backend
+podman-compose -f podman-compose.yml up -d postgres-replica
+podman-compose -f podman-compose.yml up -d backup backend
 ```
 
 ### ✅ / ❌ Esito: ___________  Ora completamento: ___________ Operatore: ___________
@@ -262,9 +262,9 @@ docker compose up -d backup backend
 
 ```bash
 # Elencare i path segreti esistenti (li useremo per la verifica post-restore)
-ROOT_TOKEN=$(docker exec inventory-bao jq -r '.root_token' /vault/init/init.json)
+ROOT_TOKEN=$(podman exec inventory-bao jq -r '.root_token' /vault/init/init.json)
 
-docker exec inventory-bao \
+podman exec inventory-bao \
   vault kv list -address=http://127.0.0.1:8200 secret/ \
   || echo "Nessun segreto ancora listato"
 ```
@@ -278,12 +278,12 @@ Path segreti registrati prima del crash:
 
 ```bash
 # Opzione 1: Semplice riavvio (testa auto-unseal)
-docker compose restart openbao
+podman-compose -f podman-compose.yml restart openbao
 
 # Opzione 2: Corruzione del volume (testa restore da snapshot) — DISTRUTTIVO
-docker compose stop openbao
-docker volume rm password-manager_vault_data
-docker compose up -d openbao
+podman-compose -f podman-compose.yml stop openbao
+podman volume rm password-manager_vault_data
+podman-compose -f podman-compose.yml up -d openbao
 sleep 20
 # A questo punto vault è up ma VUOTO (nessun segreto)
 ```
@@ -292,27 +292,27 @@ sleep 20
 
 ```bash
 # 1. Trovare lo snapshot più recente nel container backup
-docker exec inventory-backup ls -lt /backups/vault/ | head -5
+podman exec inventory-backup ls -lt /backups/vault/ | head -5
 
 # 2. Identificare il nome del file da ripristinare
 SNAP_FILE="vault_snapshot_YYYYMMDD_HHMMSS.snap"   # ← sostituire con il nome reale
 
 # 3. Leggere il root token dal vault_init (il container ha già rilevato il nuovo init)
-ROOT_TOKEN=$(docker exec inventory-bao jq -r '.root_token' /vault/init/init.json)
+ROOT_TOKEN=$(podman exec inventory-bao jq -r '.root_token' /vault/init/init.json)
 
 # 4. Restore dello snapshot
-docker exec inventory-backup \
+podman exec inventory-backup \
   sh -c "VAULT_TOKEN=${ROOT_TOKEN} vault operator raft snapshot restore \
     -address=http://inventory-bao:8200 \
     -force \
     /backups/vault/${SNAP_FILE}"
 
 # 5. Riavviare vault per applicare lo stato ripristinato
-docker compose restart openbao
+podman-compose -f podman-compose.yml restart openbao
 
 # 6. Attendere che vault sia unsealed e healthy
 sleep 30
-docker exec inventory-bao vault status -address=http://127.0.0.1:8200
+podman exec inventory-bao vault status -address=http://127.0.0.1:8200
 ```
 
 **Risultato atteso:** `Sealed: false`
@@ -320,10 +320,10 @@ docker exec inventory-bao vault status -address=http://127.0.0.1:8200
 ### Fase C.4 — Verifica integrità segreti
 
 ```bash
-ROOT_TOKEN=$(docker exec inventory-bao jq -r '.root_token' /vault/init/init.json)
+ROOT_TOKEN=$(podman exec inventory-bao jq -r '.root_token' /vault/init/init.json)
 
 # Verificare che i path registrati in C.1 siano presenti
-docker exec inventory-bao \
+podman exec inventory-bao \
   env VAULT_TOKEN=${ROOT_TOKEN} \
   vault kv list -address=http://127.0.0.1:8200 secret/
 ```
@@ -351,13 +351,13 @@ docker exec inventory-bao \
 Eseguire questa verifica **prima** di simulare il crash (o all'inizio del drill sul nuovo host).
 
 ```bash
-# Sul server DR (backup remoto), verificare la presenza dei file
-ssh backup@<OFFSITE_HOST> ls -lht /opt/nexi-vault-backups/postgres/ | head -5
-ssh backup@<OFFSITE_HOST> ls -lht /opt/nexi-vault-backups/vault/ | head -5
-ssh backup@<OFFSITE_HOST> ls -lht /opt/nexi-vault-backups/vault-init/ | head -5
+# Su oemdb1, verificare la presenza dei file
+ssh backup@oemdb1 ls -lht /backup/nexi-vault-backups/postgres/ | head -5
+ssh backup@oemdb1 ls -lht /backup/nexi-vault-backups/vault/ | head -5
+ssh backup@oemdb1 ls -lht /backup/nexi-vault-backups/vault-init/ | head -5
 
 # Verificare che l'ultimo backup non sia troppo vecchio (max 1 ora)
-LAST_PG=$(ssh backup@<OFFSITE_HOST> ls -t /opt/nexi-vault-backups/postgres/ | head -1)
+LAST_PG=$(ssh backup@oemdb1 ls -t /backup/nexi-vault-backups/postgres/ | head -1)
 echo "Ultimo pg_dump: $LAST_PG"
 ```
 
@@ -375,8 +375,8 @@ Ora verifica: ___________ Operatore: ___________
 
 ```bash
 # ATTENZIONE: questo elimina TUTTO. Eseguire solo su ambiente di test!
-docker compose down -v          # ferma container e CANCELLA tutti i volumi
-sudo rm -rf /var/lib/docker/volumes/password-manager_*  # rimozione forzata se necessario
+podman-compose -f podman-compose.yml down -v          # ferma container e CANCELLA tutti i volumi
+sudo rm -rf /var/lib/containers/storage/volumes/password-manager_*  # rimozione forzata se necessario
 ```
 
 Ora crash simulato: ___________ Operatore: ___________
@@ -388,16 +388,21 @@ Ora crash simulato: ___________ Operatore: ___________
 Sul **nuovo server** (macchina DR vuota), eseguire:
 
 ```bash
-# 2a. Installare Docker e Docker Compose
-curl -fsSL https://get.docker.com | sh
-sudo usermod -aG docker $USER && newgrp docker
-docker compose version   # verificare che sia v2.x
+# 2a. Installare Podman e podman-compose (Oracle Linux / RHEL)
+dnf install -y podman
+pip install podman-compose
+podman --version          # deve essere >= 4.0
+podman-compose --version
 
 # 2b. Clonare il repository del progetto
 git clone https://github.com/Mohamed-DN/Password-manager.git
 cd Password-manager
 
-# 2c. Creare le directory di staging per i backup
+# 2c. Creare il file .env dalle variabili di esempio
+cp .env.example .env
+$EDITOR .env   # inserire le stesse variabili dell'ambiente di produzione
+
+# 2d. Creare le directory di staging per i backup
 mkdir -p /tmp/dr-restore/postgres
 mkdir -p /tmp/dr-restore/vault
 mkdir -p /tmp/dr-restore/vault-init
@@ -410,9 +415,9 @@ Ora completamento provisioning: ___________ Operatore: ___________
 ### Fase D.3 — Copia dei backup dal server DR al nuovo host
 
 ```bash
-OFFSITE_HOST="<indirizzo del server DR>"
+OFFSITE_HOST="oemdb1"
 OFFSITE_USER="backup"
-OFFSITE_PATH="/opt/nexi-vault-backups"
+OFFSITE_PATH="/backup/nexi-vault-backups"
 
 # Copiare i file più recenti
 scp "${OFFSITE_USER}@${OFFSITE_HOST}:${OFFSITE_PATH}/postgres/$(ssh ${OFFSITE_USER}@${OFFSITE_HOST} ls -t ${OFFSITE_PATH}/postgres/ | head -1)" \
@@ -421,7 +426,7 @@ scp "${OFFSITE_USER}@${OFFSITE_HOST}:${OFFSITE_PATH}/postgres/$(ssh ${OFFSITE_US
 scp "${OFFSITE_USER}@${OFFSITE_HOST}:${OFFSITE_PATH}/vault/$(ssh ${OFFSITE_USER}@${OFFSITE_HOST} ls -t ${OFFSITE_PATH}/vault/ | head -1)" \
     /tmp/dr-restore/vault/
 
-scp "${OFFSITE_USER}@${OFFSITE_HOST}:${OFFSITE_PATH}/vault-init/$(ssh ${OFFSITE_USER}@${OFFSITE_HOST} ls -t ${OFFSITE_PATH}/vault-init/ | head -1)" \
+scp "${OFFSITE_USER}@${OFFSITE_HOST}:${OFFSITE_PATH}/vault-init/init.json" \
     /tmp/dr-restore/vault-init/init.json
 
 # Verificare integrità
@@ -440,21 +445,19 @@ Ora completamento copia: ___________ Operatore: ___________
 ### Fase D.4 — Avvio dell'infrastruttura base (solo vault e postgres vuoti)
 
 ```bash
-cd Password-manager
+# Eseguire lo script di deploy completo (crea directory, build immagini, avvia i servizi)
+sudo bash podman/deploy.sh
 
-# 4a. Avviare PostgreSQL (vuoto — i dati verranno ripristinati nel passo D.5)
-docker compose up -d postgres
-docker compose ps postgres
-# Attendere che sia healthy
-until docker inspect inventory-db | jq -r '.[0].State.Health.Status' | grep -q healthy; do
+# Attendere che PostgreSQL sia healthy
+until podman inspect inventory-db \
+      --format '{{.State.Health.Status}}' 2>/dev/null | grep -q healthy; do
     echo "Attendo postgres..."; sleep 5
 done
 echo "PostgreSQL healthy."
 
-# 4b. Creare il volume vault_init e copiare init.json nel container Vault
-docker compose up -d openbao
-# Attendere che il container sia up (potrà richiedere 30-60 secondi per init/unseal)
-until docker inspect inventory-bao | jq -r '.[0].State.Health.Status' | grep -q healthy; do
+# Attendere che OpenBao sia healthy
+until podman inspect inventory-bao \
+      --format '{{.State.Health.Status}}' 2>/dev/null | grep -q healthy; do
     echo "Attendo openbao..."; sleep 5
 done
 echo "OpenBao healthy."
@@ -471,15 +474,15 @@ PG_DUMP_FILE=$(ls /tmp/dr-restore/postgres/*.dump | head -1)
 echo "Ripristino da: $PG_DUMP_FILE"
 
 # 5a. Copiare il dump nel container postgres
-docker cp "${PG_DUMP_FILE}" inventory-db:/tmp/restore.dump
+podman cp "${PG_DUMP_FILE}" inventory-db:/tmp/restore.dump
 
 # 5b. Drop e recreate del database (init.sql lo crea, qui lo resettiamo)
-docker exec inventory-db \
+podman exec inventory-db \
   bash -c "PGPASSWORD=rootpassword123 dropdb -U postgres vault_inventory_db --if-exists && \
            PGPASSWORD=rootpassword123 createdb -U postgres vault_inventory_db"
 
 # 5c. Restore schema e dati
-docker exec inventory-db \
+podman exec inventory-db \
   bash -c "PGPASSWORD=rootpassword123 pg_restore \
     -U postgres \
     -d vault_inventory_db \
@@ -487,12 +490,12 @@ docker exec inventory-db \
     /tmp/restore.dump"
 
 # 5d. Re-applicare ruoli e permessi (non inclusi nel dump custom)
-docker exec inventory-db \
+podman exec inventory-db \
   bash -c "PGPASSWORD=rootpassword123 psql -U postgres vault_inventory_db \
     -f /docker-entrypoint-initdb.d/01-init.sql" 2>&1 | grep -E "ERROR|NOTICE|ROLE" || true
 
 # 5e. Verifica conteggi
-docker exec inventory-db \
+podman exec inventory-db \
   bash -c "PGPASSWORD=rootpassword123 psql -U postgres -d vault_inventory_db \
     -c 'SELECT count(*) AS utenze FROM inventory.utenze; SELECT count(*) AS sistemi FROM inventory.sistemi_target;'"
 ```
@@ -518,27 +521,27 @@ SNAP_FILE=$(ls /tmp/dr-restore/vault/*.snap | head -1)
 echo "Ripristino snapshot: $SNAP_FILE"
 
 # 6a. Copiare lo snapshot nel container backup (o nel vault direttamente)
-docker cp "${SNAP_FILE}" inventory-bao:/tmp/restore.snap
+podman cp "${SNAP_FILE}" inventory-bao:/tmp/restore.snap
 
 # 6b. Leggere il root token dal init.json locale
 ROOT_TOKEN=$(cat /tmp/dr-restore/vault-init/init.json | jq -r '.root_token')
 
 # 6c. Copiare init.json nel volume vault_init del container
-docker cp /tmp/dr-restore/vault-init/init.json inventory-bao:/vault/init/init.json
+podman cp /tmp/dr-restore/vault-init/init.json inventory-bao:/vault/init/init.json
 
 # 6d. Restore dello snapshot Raft
-docker exec inventory-bao \
+podman exec inventory-bao \
   sh -c "VAULT_TOKEN=${ROOT_TOKEN} vault operator raft snapshot restore \
     -address=http://127.0.0.1:8200 \
     -force \
     /tmp/restore.snap"
 
 # 6e. Riavviare OpenBao per applicare lo stato ripristinato
-docker compose restart openbao
+podman-compose -f podman-compose.yml restart openbao
 sleep 30
 
 # 6f. Verifica
-docker exec inventory-bao vault status -address=http://127.0.0.1:8200
+podman exec inventory-bao vault status -address=http://127.0.0.1:8200
 ```
 
 **Risultato atteso:**
@@ -555,25 +558,26 @@ Ora completamento: ___________ Operatore: ___________
 
 ```bash
 # 7a. Avviare replica postgres
-docker compose up -d postgres-replica
-until docker inspect inventory-db-replica | jq -r '.[0].State.Health.Status' | grep -q healthy; do
+podman-compose -f podman-compose.yml up -d postgres-replica
+until podman inspect inventory-db-replica \
+      --format '{{.State.Health.Status}}' 2>/dev/null | grep -q healthy; do
     echo "Attendo replica..."; sleep 5
 done
 echo "Replica healthy."
 
 # 7b. Avviare backend e verificare
-docker compose up -d backend
+podman-compose -f podman-compose.yml up -d backend
 sleep 15
 curl -f http://localhost:8000/health && echo "Backend OK" || echo "ERRORE: backend non risponde"
 
 # 7c. Avviare frontend
-docker compose up -d frontend
+podman-compose -f podman-compose.yml up -d frontend
 
 # 7d. Avviare backup
-docker compose up -d backup
+podman-compose -f podman-compose.yml up -d backup
 
 # 7e. Stato finale
-docker compose ps
+podman ps --format "table {{.Names}}\t{{.Status}}"
 ```
 
 **Risultato atteso:** Tutti i servizi in stato `Up (healthy)`
@@ -633,7 +637,7 @@ Ora completamento: ___________ Operatore: ___________
 
 Dopo ogni drill, verificare:
 
-- [ ] `docker compose ps` mostra tutti i servizi `Up (healthy)`
+- [ ] `podman ps --format "table {{.Names}}\t{{.Status}}"` mostra tutti i servizi `Up (healthy)`
 - [ ] `GET http://localhost:8000/health` restituisce HTTP 200
 - [ ] `GET http://localhost:5173` restituisce HTTP 200
 - [ ] `SELECT count(*) FROM inventory.utenze` corrisponde al valore pre-crash
