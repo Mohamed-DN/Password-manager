@@ -46,6 +46,28 @@ interface AuditLog {
   ip_address: string
 }
 
+interface PasswordHistoryEntry {
+  id: number
+  utenza_id: number
+  username: string
+  sistema_nome: string
+  vault_path: string
+  vault_version: number | null
+  azione: string
+  eseguito_da: string
+  note: string | null
+  created_at: string
+  password?: string | null
+}
+
+interface DeletedUtenza {
+  id: number
+  username: string
+  sistema_target_id: number
+  vault_path: string
+  deleted_at: string
+}
+
 function App() {
   const [utenze, setUtenze] = useState<Utenza[]>([])
   const [sistemi, setSistemi] = useState<Sistema[]>([])
@@ -55,7 +77,12 @@ function App() {
   const [password, setPassword] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState<boolean>(false)
-  const [activeTab, setActiveTab] = useState<'inventory' | 'audit'>('inventory')
+  const [activeTab, setActiveTab] = useState<'inventory' | 'audit' | 'old'>('inventory')
+  
+  // Password history state
+  const [passwordHistory, setPasswordHistory] = useState<PasswordHistoryEntry[]>([])
+  const [deletedUtenze, setDeletedUtenze] = useState<DeletedUtenza[]>([])
+  const [selectedDeletedUtenza, setSelectedDeletedUtenza] = useState<DeletedUtenza | null>(null)
 
   // Unified Form State
   const [formData, setFormData] = useState({
@@ -122,8 +149,30 @@ function App() {
     }
   }
 
+  const fetchDeletedUtenze = async () => {
+    try {
+      const res = await axios.get('/api/utenze/cancellate')
+      setDeletedUtenze(res.data)
+    } catch (err) {
+      console.error("Deleted Utenze API Error:", err)
+    }
+  }
+
+  const fetchPasswordHistory = async (utenza_id: number) => {
+    try {
+      const res = await axios.get(`/api/utenze/${utenza_id}/history`)
+      setPasswordHistory(res.data)
+    } catch (err) {
+      console.error("Password History API Error:", err)
+      setPasswordHistory([])
+    }
+  }
+
   useEffect(() => { fetchData() }, [])
-  useEffect(() => { if (activeTab === 'audit') fetchAuditLogs() }, [activeTab])
+  useEffect(() => { 
+    if (activeTab === 'audit') fetchAuditLogs()
+    if (activeTab === 'old') fetchDeletedUtenze()
+  }, [activeTab])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -211,6 +260,9 @@ function App() {
           </button>
           <button className={activeTab === 'audit' ? 'active' : ''} onClick={() => setActiveTab('audit')}>
             <Terminal size={18} /> Audit Logs
+          </button>
+          <button className={activeTab === 'old' ? 'active' : ''} onClick={() => setActiveTab('old')}>
+            <FileText size={18} /> Old / Storico
           </button>
         </nav>
 
@@ -314,6 +366,46 @@ function App() {
                     <td>{log.ip_address}</td>
                   </tr>
                 ))}
+              </tbody>
+            </table>
+          </div>
+          )}
+
+          {activeTab === 'old' && (
+          <div className="inventory-card">
+            <h3 style={{marginBottom: '1rem', color: 'var(--text-muted)', fontSize: '0.9rem'}}>Deleted Users - Click to view password history</h3>
+            <table className="modern-table">
+              <thead>
+                <tr>
+                  <th>Username</th>
+                  <th>System</th>
+                  <th>Vault Path</th>
+                  <th>Deleted At</th>
+                </tr>
+              </thead>
+              <tbody>
+                {deletedUtenze.length === 0 && (
+                  <tr><td colSpan={4} style={{textAlign:'center', padding:'2rem', color:'var(--text-muted)'}}>No deleted users found.</td></tr>
+                )}
+                {deletedUtenze.map(u => {
+                  const s = getSys(u.sistema_target_id)
+                  return (
+                    <tr 
+                      key={u.id} 
+                      onClick={() => {
+                        setSelectedDeletedUtenza(u)
+                        setPasswordHistory([])
+                        fetchPasswordHistory(u.id)
+                      }} 
+                      className={selectedDeletedUtenza?.id === u.id ? 'selected' : ''}
+                    >
+                      <td><span className="username">{u.username}</span></td>
+                      <td>{s?.nome_sistema || 'Unknown'}</td>
+                      <td><code className="code-path">{u.vault_path}</code></td>
+                      <td><code className="code-path">{new Date(u.deleted_at).toLocaleString()}</code></td>
+                    </tr>
+                  )
+                })}
               </tbody>
             </table>
           </div>
