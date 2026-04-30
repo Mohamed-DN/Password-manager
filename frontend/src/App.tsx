@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react'
 import axios from 'axios'
 import { 
-  Key, Shield, Database, LayoutTemplate, X, Activity, 
-  Plus, Search, Terminal, Globe, Server, User, FileText,
-  ChevronRight, CheckCircle2, AlertCircle, Copy, Trash2,
-  HardDrive, Cloud, Layers, Cpu, Database as DbIcon
+  Key, Shield, Database, X, Activity, 
+  Plus, Search, Terminal,
+  User, FileText,
+  Copy,
+  HardDrive, Cloud, Layers,
+  Database as DbIcon
 } from 'lucide-react'
 
 // --- Types ---
@@ -14,6 +16,8 @@ interface Utenza {
   sistema_target_id: number
   vault_path: string
   attiva: boolean
+  bao_owner_id: number
+  ticket_id: number | null
   attributi_specifici?: Record<string, any>
 }
 
@@ -33,15 +37,52 @@ interface Lookups {
   ticket: any[]
 }
 
+interface AuditLog {
+  id: number
+  timestamp: string
+  utente_operatore: string
+  azione: string
+  dettagli: Record<string, any>
+  ip_address: string
+}
+
+interface PasswordHistoryEntry {
+  id: number
+  utenza_id: number
+  username: string
+  sistema_nome: string
+  vault_path: string
+  vault_version: number | null
+  azione: string
+  eseguito_da: string
+  note: string | null
+  created_at: string
+  password?: string | null
+}
+
+interface DeletedUtenza {
+  id: number
+  username: string
+  sistema_target_id: number
+  vault_path: string
+  deleted_at: string
+}
+
 function App() {
   const [utenze, setUtenze] = useState<Utenza[]>([])
   const [sistemi, setSistemi] = useState<Sistema[]>([])
   const [lookups, setLookups] = useState<Lookups | null>(null)
+  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([])
   const [selectedUtenza, setSelectedUtenza] = useState<Utenza | null>(null)
   const [password, setPassword] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState<boolean>(false)
-  const [activeTab, setActiveTab] = useState<'inventory' | 'audit'>('inventory')
+  const [activeTab, setActiveTab] = useState<'inventory' | 'audit' | 'old'>('inventory')
+  
+  // Password history state
+  const [passwordHistory, setPasswordHistory] = useState<PasswordHistoryEntry[]>([])
+  const [deletedUtenze, setDeletedUtenze] = useState<DeletedUtenza[]>([])
+  const [selectedDeletedUtenza, setSelectedDeletedUtenza] = useState<DeletedUtenza | null>(null)
 
   // Unified Form State
   const [formData, setFormData] = useState({
@@ -99,7 +140,39 @@ function App() {
     }
   }
 
+  const fetchAuditLogs = async () => {
+    try {
+      const res = await axios.get('/api/audit')
+      setAuditLogs(res.data)
+    } catch (err) {
+      console.error("Audit API Error:", err)
+    }
+  }
+
+  const fetchDeletedUtenze = async () => {
+    try {
+      const res = await axios.get('/api/utenze/cancellate')
+      setDeletedUtenze(res.data)
+    } catch (err) {
+      console.error("Deleted Utenze API Error:", err)
+    }
+  }
+
+  const fetchPasswordHistory = async (utenza_id: number) => {
+    try {
+      const res = await axios.get(`/api/utenze/${utenza_id}/history`)
+      setPasswordHistory(res.data)
+    } catch (err) {
+      console.error("Password History API Error:", err)
+      setPasswordHistory([])
+    }
+  }
+
   useEffect(() => { fetchData() }, [])
+  useEffect(() => { 
+    if (activeTab === 'audit') fetchAuditLogs()
+    if (activeTab === 'old') fetchDeletedUtenze()
+  }, [activeTab])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -188,6 +261,9 @@ function App() {
           <button className={activeTab === 'audit' ? 'active' : ''} onClick={() => setActiveTab('audit')}>
             <Terminal size={18} /> Audit Logs
           </button>
+          <button className={activeTab === 'old' ? 'active' : ''} onClick={() => setActiveTab('old')}>
+            <FileText size={18} /> Old / Storico
+          </button>
         </nav>
 
         <div className="sidebar-bottom">
@@ -215,10 +291,11 @@ function App() {
 
         <div className="content-scroll">
           <div className="page-intro">
-            <h1>Asset Inventory</h1>
-            <p>Enterprise database credentials management with HashiCorp Vault encryption.</p>
+            <h1>{activeTab === 'inventory' ? 'Asset Inventory' : 'Audit Logs'}</h1>
+            <p>{activeTab === 'inventory' ? 'Enterprise database credentials management with HashiCorp Vault encryption.' : 'Track every access and operation on sensitive credentials.'}</p>
           </div>
 
+          {activeTab === 'inventory' && (
           <div className="inventory-card">
             <table className="modern-table">
               <thead>
@@ -262,6 +339,77 @@ function App() {
               </tbody>
             </table>
           </div>
+          )}
+
+          {activeTab === 'audit' && (
+          <div className="inventory-card">
+            <table className="modern-table">
+              <thead>
+                <tr>
+                  <th>Timestamp</th>
+                  <th>Operator</th>
+                  <th>Action</th>
+                  <th>Details</th>
+                  <th>IP Address</th>
+                </tr>
+              </thead>
+              <tbody>
+                {auditLogs.length === 0 && (
+                  <tr><td colSpan={5} style={{textAlign:'center', padding:'2rem', color:'var(--text-muted)'}}>No audit log entries yet.</td></tr>
+                )}
+                {auditLogs.map(log => (
+                  <tr key={log.id}>
+                    <td><code className="code-path">{new Date(log.timestamp).toLocaleString()}</code></td>
+                    <td>{log.utente_operatore}</td>
+                    <td><span className="tag" style={{background:'#eff6ff', color:'var(--accent)'}}>{log.azione}</span></td>
+                    <td><code className="code-path">{JSON.stringify(log.dettagli)}</code></td>
+                    <td>{log.ip_address}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          )}
+
+          {activeTab === 'old' && (
+          <div className="inventory-card">
+            <h3 style={{marginBottom: '1rem', color: 'var(--text-muted)', fontSize: '0.9rem'}}>Deleted Users - Click to view password history</h3>
+            <table className="modern-table">
+              <thead>
+                <tr>
+                  <th>Username</th>
+                  <th>System</th>
+                  <th>Vault Path</th>
+                  <th>Deleted At</th>
+                </tr>
+              </thead>
+              <tbody>
+                {deletedUtenze.length === 0 && (
+                  <tr><td colSpan={4} style={{textAlign:'center', padding:'2rem', color:'var(--text-muted)'}}>No deleted users found.</td></tr>
+                )}
+                {deletedUtenze.map(u => {
+                  const s = getSys(u.sistema_target_id)
+                  return (
+                    <tr 
+                      key={u.id} 
+                      onClick={() => {
+                        setSelectedDeletedUtenza(u)
+                        setPasswordHistory([])
+                        fetchPasswordHistory(u.id)
+                      }} 
+                      className={selectedDeletedUtenza?.id === u.id ? 'selected' : ''}
+                    >
+                      <td><span className="username">{u.username}</span></td>
+                      <td>{s?.nome_sistema || 'Unknown'}</td>
+                      <td><code className="code-path">{u.vault_path}</code></td>
+                      <td><code className="code-path">{new Date(u.deleted_at).toLocaleString()}</code></td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+          )}
         </div>
       </main>
 
@@ -276,7 +424,7 @@ function App() {
              <div className="detail-box">
                 <label>Accountability</label>
                 <div className="row"><User size={16}/> {lookups?.bao_owners.find(o => o.id === selectedUtenza.bao_owner_id)?.nome} {lookups?.bao_owners.find(o => o.id === selectedUtenza.bao_owner_id)?.cognome}</div>
-                <div className="row"><FileText size={16}/> Ticket: {lookups?.ticket?.find(t => t.id === selectedUtenza.id)?.codice_ticket || 'N/A'}</div>
+                <div className="row"><FileText size={16}/> Ticket: {lookups?.ticket?.find(t => t.id === selectedUtenza.ticket_id)?.codice_ticket || 'N/A'}</div>
              </div>
 
              <div className="detail-box">
