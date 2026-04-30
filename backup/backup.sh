@@ -1,7 +1,7 @@
 #!/bin/bash
 # backup.sh
 # Performs a logical backup of PostgreSQL and a Raft snapshot of Vault.
-# Designed to be called from cron inside the backup container.
+# Designed to be called from cron inside the backup container (daily at 02:00).
 set -euo pipefail
 
 # ---------------------------------------------------------------------------
@@ -11,6 +11,8 @@ DATE=$(date +%Y%m%d_%H%M%S)
 BACKUP_ROOT="${BACKUP_ROOT:-/backups}"
 PG_BACKUP_DIR="${BACKUP_ROOT}/postgres"
 VAULT_BACKUP_DIR="${BACKUP_ROOT}/vault"
+# Local retention: keep this many daily backups on the container volume.
+# Default: 7 (one week).  Offsite (oemdb1) keeps 30 days — see offsite-copy.sh.
 RETENTION_DAYS="${RETENTION_DAYS:-7}"
 
 DB_HOST="${DB_HOST:-inventory-db}"
@@ -29,11 +31,14 @@ LOG_PREFIX="[backup][${DATE}]"
 # ---------------------------------------------------------------------------
 log() { echo "${LOG_PREFIX} $*"; }
 
+log "===== Daily backup started ====="
+
 # ---------------------------------------------------------------------------
-# 1. PostgreSQL — pg_dump (custom format, compressed)
+# 1. PostgreSQL — pg_dump (custom format, max compression)
 # ---------------------------------------------------------------------------
 log "Starting PostgreSQL backup of '${DB_NAME}' on ${DB_HOST}:${DB_PORT}..."
 
+mkdir -p "${PG_BACKUP_DIR}"
 PG_DUMP_FILE="${PG_BACKUP_DIR}/pg_backup_${DATE}.dump"
 
 PGPASSWORD="${DB_PASSWORD}" pg_dump \
@@ -53,6 +58,8 @@ log "PostgreSQL backup saved: ${PG_DUMP_FILE} (${PG_SIZE})"
 # ---------------------------------------------------------------------------
 log "Starting Vault Raft snapshot from ${VAULT_ADDR}..."
 
+mkdir -p "${VAULT_BACKUP_DIR}"
+
 if [ ! -f "${VAULT_INIT_FILE}" ]; then
     log "WARNING: Vault init file not found at ${VAULT_INIT_FILE}. Skipping Vault snapshot."
 else
@@ -69,12 +76,20 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 3. Retention — delete backups older than RETENTION_DAYS
+# 3. Local retention — delete backups older than RETENTION_DAYS
+#    Offsite retention (30 days on oemdb1) is managed by offsite-copy.sh.
 # ---------------------------------------------------------------------------
-log "Applying ${RETENTION_DAYS}-day retention policy..."
+log "Applying ${RETENTION_DAYS}-day local retention policy..."
 
 DELETED_PG=$(find "${PG_BACKUP_DIR}"    -name "pg_backup_*.dump" -mtime "+${RETENTION_DAYS}" -print -delete | wc -l)
 DELETED_VT=$(find "${VAULT_BACKUP_DIR}" -name "vault_snapshot_*.snap" -mtime "+${RETENTION_DAYS}" -print -delete | wc -l)
 
-log "Retention: removed ${DELETED_PG} PostgreSQL dump(s), ${DELETED_VT} Vault snapshot(s)."
-log "Backup run complete."
+log "Local retention: removed ${DELETED_PG} PostgreSQL dump(s), ${DELETED_VT} Vault snapshot(s)."
+
+# ---------------------------------------------------------------------------
+# 4. Summary
+# ---------------------------------------------------------------------------
+log "Local backups currently on disk:"
+log "  PostgreSQL: $(ls "${PG_BACKUP_DIR}"/pg_backup_*.dump 2>/dev/null | wc -l) file(s)"
+log "  Vault:      $(ls "${VAULT_BACKUP_DIR}"/vault_snapshot_*.snap 2>/dev/null | wc -l) file(s)"
+log "===== Daily backup complete ====="
