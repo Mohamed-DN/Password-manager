@@ -2,13 +2,16 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional, Dict, Any, Union
+from typing import Optional, Dict, Any, Union, List
 from database import db, get_db_connection
-from vault import store_password, get_password
+from vault import store_password, get_password, get_current_vault_version, get_password_by_version
 import json
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Configure Vault KV max_versions at startup
+    from vault import configure_kv_max_versions
+    configure_kv_max_versions(200)
     await db.connect()
     yield
     await db.disconnect()
@@ -207,13 +210,34 @@ class PasswordUpdate(BaseModel):
 
 @app.patch("/api/utenze/{utenza_id}/password")
 async def update_password(utenza_id: int, update: PasswordUpdate, request: Request):
-    """Aggiorna la password in OpenBao per un'utenza esistente."""
+    """
+    Aggiorna la password in OpenBao per un'utenza esistente.
+    Prima di sovrascrivere, salva la versione precedente nello storico_password.
+    """
     async with get_db_connection() as conn:
-        row = await conn.fetchrow("SELECT username, vault_path FROM utenze WHERE id = $1", utenza_id)
+        row = await conn.fetchrow("SELECT id, username, vault_path, sistema_target_id FROM utenze WHERE id = $1", utenza_id)
         if not row:
             raise HTTPException(status_code=404, detail="Utenza non trovata")
         
         vault_path = row['vault_path']
+        
+        # 1. Recupera la versione corrente PRIMA di aggiornare
+        old_version = get_current_vault_version(vault_path)
+        
+        # 2. Ottieni il nome del sistema per denormalizzare nello storico
+        sistema_nome = await conn.fetchval("SELECT nome_sistema FROM sistemi_target WHERE id = $1", row['sistema_target_id'])
+        
+        # 3. Registra la versione vecchia nello storico (se esiste una versione precedente)
+        if old_version is not None:
+            await conn.execute(
+                """
+                INSERT INTO storico_password (utenza_id, username, sistema_nome, vault_path, vault_version, azione, eseguito_da)
+                VALUES ($1, $2, $3, $4, $5, 'MODIFICA_PASSWORD', 'SYSTEM_UI')
+                """,
+                utenza_id, row['username'], sistema_nome, vault_path, old_version
+            )
+        
+        # 4. Aggiorna la password in Vault (crea nuova versione automaticamente)
         success = store_password(vault_path, update.new_password)
         
         if not success:
@@ -249,5 +273,87 @@ async def get_audit_log():
     async with get_db_connection() as conn:
         rows = await conn.fetch(
             "SELECT id, timestamp, utente_operatore, azione, dettagli, ip_address FROM audit_log ORDER BY timestamp DESC LIMIT 200"
+        )
+        return [dict(r) for r in rows]
+
+@app.delete("/api/utenze/{utenza_id}")
+async def delete_utenza(utenza_id: int, request: Request):
+    """
+    Cancella logicamente un'utenza:
+    1. Registra la versione corrente nello storico_password con azione CANCELLAZIONE
+    2. Imposta deleted_at su NOW() (soft-delete)
+    """
+    async with get_db_connection() as conn:
+        row = await conn.fetchrow("SELECT id, username, vault_path, sistema_target_id FROM utenze WHERE id = $1 AND deleted_at IS NULL", utenza_id)
+        if not row:
+            raise HTTPException(status_code=404, detail="Utenza non trovata o già cancellata")
+        
+        vault_path = row['vault_path']
+        sistema_nome = await conn.fetchval("SELECT nome_sistema FROM sistemi_target WHERE id = $1", row['sistema_target_id'])
+        
+        # 1. Registra la versione corrente prima di cancellare
+        current_version = get_current_vault_version(vault_path)
+        if current_version is not None:
+            await conn.execute(
+                """
+                INSERT INTO storico_password (utenza_id, username, sistema_nome, vault_path, vault_version, azione, eseguito_da)
+                VALUES ($1, $2, $3, $4, $5, 'CANCELLAZIONE', 'SYSTEM_UI')
+                """,
+                utenza_id, row['username'], sistema_nome, vault_path, current_version
+            )
+        
+        # 2. Soft-delete
+        await conn.execute("UPDATE utenze SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1", utenza_id)
+        
+        await log_action("DELETE_USER", {"utenza_id": utenza_id, "username": row['username']}, request)
+        return {"message": "Utenza cancellata con successo"}
+
+class PasswordHistoryEntry(BaseModel):
+    id: int
+    utenza_id: int
+    username: str
+    sistema_nome: str
+    vault_path: str
+    vault_version: Optional[int]
+    azione: str
+    eseguito_da: str
+    note: Optional[str]
+    created_at: str
+
+@app.get("/api/utenze/{utenza_id}/history")
+async def get_password_history(utenza_id: int):
+    """
+    Recupera lo storico password per un'utenza.
+    Per ogni voce, recupera anche la password effettiva da OpenBao usando vault_version.
+    """
+    async with get_db_connection() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT id, utenza_id, username, sistema_nome, vault_path, vault_version, azione, eseguito_da, note, created_at
+            FROM storico_password
+            WHERE utenza_id = $1
+            ORDER BY created_at DESC
+            """,
+            utenza_id
+        )
+        
+        history = []
+        for row in rows:
+            entry = dict(row)
+            # Recupera la password storica da Vault se c'è una versione
+            if entry['vault_version'] is not None:
+                entry['password'] = get_password_by_version(entry['vault_path'], entry['vault_version'])
+            else:
+                entry['password'] = None  # Voce di cancellazione
+            history.append(entry)
+        
+        return history
+
+@app.get("/api/utenze/cancellate")
+async def get_deleted_utenze():
+    """Recupera tutte le utenze cancellate (soft-delete)."""
+    async with get_db_connection() as conn:
+        rows = await conn.fetch(
+            "SELECT id, username, sistema_target_id, vault_path, deleted_at FROM utenze WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC"
         )
         return [dict(r) for r in rows]
