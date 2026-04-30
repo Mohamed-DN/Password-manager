@@ -357,3 +357,27 @@ async def get_deleted_utenze():
             "SELECT id, username, sistema_target_id, vault_path, deleted_at FROM utenze WHERE deleted_at IS NOT NULL ORDER BY deleted_at DESC"
         )
         return [dict(r) for r in rows]
+
+@app.get("/api/history/global")
+async def get_global_history():
+    """Recupera la cronologia globale di tutte le password (rotazioni e cancellazioni)."""
+    async with get_db_connection() as conn:
+        rows = await conn.fetch(
+            """
+            SELECT id, utenza_id, username, sistema_nome, vault_path, vault_version, azione, eseguito_da, note, created_at
+            FROM storico_password
+            ORDER BY created_at DESC
+            LIMIT 500
+            """
+        )
+        
+        history = []
+        for row in rows:
+            entry = dict(row)
+            if entry['vault_version'] is not None:
+                entry['password'] = get_password_by_version(entry['vault_path'], entry['vault_version'])
+            else:
+                entry['password'] = None
+            history.append(entry)
+        
+        return history
