@@ -80,6 +80,7 @@ function App() {
   const [activeTab, setActiveTab] = useState<'inventory' | 'audit' | 'old'>('inventory')
   const [searchTerm, setSearchTerm] = useState('')
   const [filterUtenzaId, setFilterUtenzaId] = useState<number | null>(null)
+  const [revealedHistoryIds, setRevealedHistoryIds] = useState<Set<number>>(new Set())
   
   // Password history state
   const [passwordHistory, setPasswordHistory] = useState<PasswordHistoryEntry[]>([])
@@ -451,13 +452,35 @@ function App() {
                           <td>{eName !== 'Unknown' ? <span className={`tag env-${eName.toLowerCase()}`} style={{fontSize:'0.65rem'}}>{eName}</span> : '-'}</td>
                           <td>{h.vault_version ? `#${h.vault_version}` : '-'}</td>
                           <td>
-                            {h.password ? (
-                              <div className="secret-card" style={{padding:'2px 8px', background:'#f1f5f9', width:'fit-content'}}>
-                                <code>{h.password}</code>
-                                <button onClick={() => navigator.clipboard.writeText(h.password || '')} style={{padding:'2px', marginLeft:'4px'}}><Copy size={12}/></button>
+                          {h.password ? (
+                            <div className="secret-card" style={{padding:'2px 8px', background:'#f1f5f9', width:'fit-content', gap:'8px'}}>
+                              <code style={{fontFamily:'monospace'}}>
+                                {revealedHistoryIds.has(h.id) ? h.password : '••••••••'}
+                              </code>
+                              <div style={{display:'flex', gap:'4px'}}>
+                                <button 
+                                  title={revealedHistoryIds.has(h.id) ? "Hide" : "Show"}
+                                  onClick={() => {
+                                    const next = new Set(revealedHistoryIds);
+                                    if (next.has(h.id)) next.delete(h.id);
+                                    else next.add(h.id);
+                                    setRevealedHistoryIds(next);
+                                  }}
+                                  style={{padding:'2px', background:'transparent', border:'none', cursor:'pointer', color:'var(--text-muted)'}}
+                                >
+                                  <Activity size={12} />
+                                </button>
+                                <button 
+                                  title="Copy"
+                                  onClick={() => navigator.clipboard.writeText(h.password || '')} 
+                                  style={{padding:'2px', background:'transparent', border:'none', cursor:'pointer', color:'var(--text-muted)'}}
+                                >
+                                  <Copy size={12}/>
+                                </button>
                               </div>
-                            ) : 'N/A'}
-                          </td>
+                            </div>
+                          ) : 'N/A'}
+                        </td>
                           <td><code className="code-path">{new Date(h.created_at).toLocaleString()}</code></td>
                         </tr>
                       )})
