@@ -527,7 +527,27 @@ function App() {
                 
                 <div className="change-pwd-area">
                   {!isChangingPwd ? (
-                    <button className="btn-text-small" onClick={() => setIsChangingPwd(true)}>Change Password?</button>
+                    <div style={{display:'flex', gap:'1rem', marginTop:'0.5rem'}}>
+                      <button className="btn-text-small" onClick={() => setIsChangingPwd(true)}>Change Password?</button>
+                      <button 
+                        className="btn-text-small" 
+                        style={{color: '#ef4444'}} 
+                        onClick={async () => {
+                          if (window.confirm(`Are you sure you want to delete user ${selectedUtenza.username}? This will soft-delete the record and archive the password history.`)) {
+                            try {
+                              await axios.delete(`/api/utenze/${selectedUtenza.id}`)
+                              setSelectedUtenza(null)
+                              fetchData()
+                              alert("User deleted and archived.")
+                            } catch (err) {
+                              alert("Error: " + (err as any).message)
+                            }
+                          }
+                        }}
+                      >
+                        Delete User
+                      </button>
+                    </div>
                   ) : (
                     <div className="pwd-input-group">
                       <input type="password" placeholder="New password..." value={newPasswordVal} onChange={e => setNewPasswordVal(e.target.value)} />
