@@ -79,6 +79,7 @@ function App() {
   const [showModal, setShowModal] = useState<boolean>(false)
   const [activeTab, setActiveTab] = useState<'inventory' | 'audit' | 'old'>('inventory')
   const [searchTerm, setSearchTerm] = useState('')
+  const [filterUtenzaId, setFilterUtenzaId] = useState<number | null>(null)
   
   // Password history state
   const [passwordHistory, setPasswordHistory] = useState<PasswordHistoryEntry[]>([])
@@ -271,7 +272,7 @@ function App() {
           <button className={activeTab === 'audit' ? 'active' : ''} onClick={() => setActiveTab('audit')}>
             <Terminal size={18} /> Audit Logs
           </button>
-          <button className={activeTab === 'old' ? 'active' : ''} onClick={() => setActiveTab('old')}>
+          <button className={activeTab === 'old' ? 'active' : ''} onClick={() => { setActiveTab('old'); setFilterUtenzaId(null); }}>
             <FileText size={18} /> Old / Storico
           </button>
         </nav>
@@ -404,7 +405,14 @@ function App() {
 
           {activeTab === 'old' && (
           <div className="inventory-card">
-            <h3 style={{marginBottom: '1rem', color: 'var(--text-muted)', fontSize: '0.9rem'}}>Recent Password Rotations & Deletions</h3>
+            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1rem'}}>
+              <h3 style={{color: 'var(--text-muted)', fontSize: '0.9rem'}}>
+                {filterUtenzaId ? `Specific History for ID #${filterUtenzaId}` : 'Recent Password Rotations & Deletions'}
+              </h3>
+              {filterUtenzaId && (
+                <button className="btn-text-mini" onClick={() => setFilterUtenzaId(null)}>Clear Filter (Show All)</button>
+              )}
+            </div>
             <div className="history-list">
               {passwordHistory.length === 0 ? (
                 <div style={{textAlign:'center', padding:'3rem', color:'var(--text-muted)'}}>
@@ -418,6 +426,7 @@ function App() {
                       <th>Action</th>
                       <th>Username</th>
                       <th>System</th>
+                      <th>Environment</th>
                       <th>Version</th>
                       <th>Password (Old)</th>
                       <th>Date</th>
@@ -425,24 +434,34 @@ function App() {
                   </thead>
                   <tbody>
                     {passwordHistory
-                      .filter(h => h.username.toLowerCase().includes(searchTerm.toLowerCase()) || h.sistema_nome.toLowerCase().includes(searchTerm.toLowerCase()))
-                      .map(h => (
-                      <tr key={h.id}>
-                        <td><span className={`tag ${h.azione === 'CANCELLAZIONE' ? 'env-produzione' : 'env-sviluppo'}`}>{h.azione}</span></td>
-                        <td><span className="username">{h.username}</span></td>
-                        <td>{h.sistema_nome}</td>
-                        <td>{h.vault_version ? `#${h.vault_version}` : '-'}</td>
-                        <td>
-                          {h.password ? (
-                            <div className="secret-card" style={{padding:'2px 8px', background:'#f1f5f9', width:'fit-content'}}>
-                              <code>{h.password}</code>
-                              <button onClick={() => navigator.clipboard.writeText(h.password || '')} style={{padding:'2px', marginLeft:'4px'}}><Copy size={12}/></button>
-                            </div>
-                          ) : 'N/A'}
-                        </td>
-                        <td><code className="code-path">{new Date(h.created_at).toLocaleString()}</code></td>
-                      </tr>
-                    ))}
+                      .filter(h => {
+                        if (filterUtenzaId && h.utenza_id !== filterUtenzaId) return false;
+                        return h.username.toLowerCase().includes(searchTerm.toLowerCase()) || h.sistema_nome.toLowerCase().includes(searchTerm.toLowerCase());
+                      })
+                      .map(h => {
+                        // Cerchiamo l'ambiente e tecnologia se possibile per mostrare tag
+                        const u = utenze.find(ut => ut.id === h.utenza_id)
+                        const s = getSys(u?.sistema_target_id || 0)
+                        const eName = getEnvName(s?.ambiente_id || 0)
+                        return (
+                        <tr key={h.id}>
+                          <td><span className={`tag ${h.azione === 'CANCELLAZIONE' ? 'env-produzione' : 'env-sviluppo'}`}>{h.azione}</span></td>
+                          <td><span className="username">{h.username}</span></td>
+                          <td>{h.sistema_nome}</td>
+                          <td>{eName !== 'Unknown' ? <span className={`tag env-${eName.toLowerCase()}`} style={{fontSize:'0.65rem'}}>{eName}</span> : '-'}</td>
+                          <td>{h.vault_version ? `#${h.vault_version}` : '-'}</td>
+                          <td>
+                            {h.password ? (
+                              <div className="secret-card" style={{padding:'2px 8px', background:'#f1f5f9', width:'fit-content'}}>
+                                <code>{h.password}</code>
+                                <button onClick={() => navigator.clipboard.writeText(h.password || '')} style={{padding:'2px', marginLeft:'4px'}}><Copy size={12}/></button>
+                              </div>
+                            ) : 'N/A'}
+                          </td>
+                          <td><code className="code-path">{new Date(h.created_at).toLocaleString()}</code></td>
+                        </tr>
+                      )})
+                    }
                   </tbody>
                 </table>
               )}
@@ -495,7 +514,7 @@ function App() {
                   {!isChangingPwd ? (
                     <div style={{display:'flex', flexWrap:'wrap', gap:'0.5rem', marginTop:'0.5rem'}}>
                       <button className="btn-text-small" onClick={() => setIsChangingPwd(true)}>Change Password?</button>
-                      <button className="btn-text-small" onClick={() => { setActiveTab('old'); setSearchTerm(selectedUtenza.username); }}>View Full History</button>
+                      <button className="btn-text-small" onClick={() => { setActiveTab('old'); setFilterUtenzaId(selectedUtenza.id); setSearchTerm(''); }}>View Full History</button>
                       <button 
                         className="btn-text-small" 
                         style={{color: '#ef4444'}} 
