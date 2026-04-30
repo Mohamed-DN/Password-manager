@@ -36,25 +36,42 @@ if not VAULT_TOKEN:
                 "has completed initialisation before starting the backend."
             )
 
+# ---------------------------------------------------------------------------
+# CONFIGURAZIONE RETENTION E VERSIONI
+# ---------------------------------------------------------------------------
+# Per 100.000+ password critiche, manteniamo uno storico robusto.
+# 10 anni di storico con rotazione mensile = 120 versioni.
+# Con rotazione settimanale = 520 versioni.
+# Impostiamo 1000 per sicurezza, coprendo anche rotazioni frequenti.
+# Il valore può essere sovrascritto via environment variable MAX_VERSIONS.
+
+# ---------------------------------------------------------------------------
+# INIZIALIZZAZIONE CLIENT
+# ---------------------------------------------------------------------------
+
 # Inizializza il client hvac
 client = hvac.Client(url=VAULT_ADDR, token=VAULT_TOKEN)
 
 
-def configure_kv_max_versions(max_versions: int = 200) -> None:
+def configure_kv_max_versions(max_versions: int = 1000) -> None:
     """
     Configure the KV v2 mount to retain max_versions versions per secret.
     Called once at application startup.
-
-    Why 200?  Password history is retained for 10 years.  Even with daily
-    password rotations that is only 3 650 versions.  200 covers most real
-    workloads while keeping memory usage minimal inside OpenBao.  Increase
-    if needed.
-
-    Note: this sets the *default* for new secrets.  Existing secrets keep
-    their per-path setting unless updated individually.
+    
+    Per 100.000+ password critiche con retention di 10 anni:
+    - Rotazione mensile: 120 versioni necessarie
+    - Rotazione settimanale: 520 versioni necessarie  
+    - Rotazione giornaliera: 3650 versioni necessarie
+    
+    Default: 1000 versioni (copre rotazioni settimanali con margine).
+    Aumentare MAX_VERSIONS environment variable se serve retention maggiore.
+    
+    Nota: OpenBao memorizza le versioni in modo efficiente usando storage
+    incrementale. 1000 versioni per 100k password = spazio gestibile.
     """
     try:
         client.secrets.kv.v2.configure(max_versions=max_versions)
+        print(f"KV v2 configured with max_versions={max_versions}")
     except Exception as e:
         print(f"Warning: Could not configure KV v2 max_versions: {e}")
 
