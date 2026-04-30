@@ -172,7 +172,16 @@ function App() {
   useEffect(() => { fetchData() }, [])
   useEffect(() => { 
     if (activeTab === 'audit') fetchAuditLogs()
-    if (activeTab === 'old') fetchDeletedUtenze()
+    if (activeTab === 'old') {
+      // Fetch global history
+      const fetchGlobalHistory = async () => {
+        try {
+          const res = await axios.get('/api/history/global')
+          setPasswordHistory(res.data)
+        } catch (err) { console.error(err) }
+      }
+      fetchGlobalHistory()
+    }
   }, [activeTab])
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -395,92 +404,49 @@ function App() {
 
           {activeTab === 'old' && (
           <div className="inventory-card">
-            <h3 style={{marginBottom: '1rem', color: 'var(--text-muted)', fontSize: '0.9rem'}}>Deleted Users - Click to view password history</h3>
-            <table className="modern-table">
-              <thead>
-                <tr>
-                  <th>Username</th>
-                  <th>System</th>
-                  <th>Vault Path</th>
-                  <th>Deleted At</th>
-                </tr>
-              </thead>
-              <tbody>
-                {deletedUtenze
-                  .filter(u => u.username.toLowerCase().includes(searchTerm.toLowerCase()))
-                  .map(u => {
-                  const s = getSys(u.sistema_target_id)
-                  return (
-                    <tr 
-                      key={u.id} 
-                      onClick={() => {
-                        setSelectedDeletedUtenza(u)
-                        fetchPasswordHistory(u.id)
-                      }} 
-                      className={selectedDeletedUtenza?.id === u.id ? 'selected' : ''}
-                    >
-                      <td><span className="username">{u.username}</span></td>
-                      <td>{s?.nome_sistema || 'Unknown'}</td>
-                      <td><code className="code-path">{u.vault_path}</code></td>
-                      <td><code className="code-path">{new Date(u.deleted_at).toLocaleString()}</code></td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-
-            {/* Password History Section */}
-            {selectedDeletedUtenza && (
-              <div className="history-details animate-in" style={{marginTop: '2rem', padding: '1.5rem', background: '#f8fafc', borderRadius: '12px', border: '1px solid #e2e8f0'}}>
-                <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1.5rem'}}>
-                  <h3 style={{color: 'var(--text-main)', display:'flex', alignItems:'center', gap:'8px'}}>
-                    <Activity size={18} color="var(--accent)"/> 
-                    Password History for {selectedDeletedUtenza.username}
-                  </h3>
-                  <button className="close-btn" onClick={() => setSelectedDeletedUtenza(null)}><X size={16}/></button>
+            <h3 style={{marginBottom: '1rem', color: 'var(--text-muted)', fontSize: '0.9rem'}}>Recent Password Rotations & Deletions</h3>
+            <div className="history-list">
+              {passwordHistory.length === 0 ? (
+                <div style={{textAlign:'center', padding:'3rem', color:'var(--text-muted)'}}>
+                   <Activity className="spinner" style={{marginBottom:'1rem'}}/>
+                   <p>No history records found.</p>
                 </div>
-
-                {passwordHistory.length === 0 ? (
-                  <p style={{color: 'var(--text-muted)'}}>Loading history...</p>
-                ) : (
-                  <div className="history-list">
-                    {passwordHistory.map((h, idx) => (
-                      <div key={h.id} className="history-item" style={{
-                        padding: '1rem', 
-                        background: 'white', 
-                        borderRadius: '8px', 
-                        marginBottom: '0.75rem', 
-                        border: '1px solid #e2e8f0',
-                        boxShadow: '0 1px 2px rgba(0,0,0,0.05)'
-                      }}>
-                        <div style={{display:'flex', justifyContent:'space-between', marginBottom: '0.5rem'}}>
-                          <span className={`tag ${h.azione === 'CANCELLAZIONE' ? 'env-produzione' : 'env-sviluppo'}`} style={{fontSize:'0.7rem'}}>
-                            {h.azione}
-                          </span>
-                          <span style={{fontSize: '0.75rem', color: 'var(--text-muted)'}}>{new Date(h.created_at).toLocaleString()}</span>
-                        </div>
-                        <div style={{display:'flex', alignItems:'center', justifyContent:'space-between'}}>
-                          <div>
-                            <div style={{fontSize: '0.85rem', fontWeight: 600, color: 'var(--text-main)'}}>
-                              {h.azione === 'CANCELLAZIONE' ? 'Final State at Deletion' : `Version #${h.vault_version}`}
+              ) : (
+                <table className="modern-table">
+                  <thead>
+                    <tr>
+                      <th>Action</th>
+                      <th>Username</th>
+                      <th>System</th>
+                      <th>Version</th>
+                      <th>Password (Old)</th>
+                      <th>Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {passwordHistory
+                      .filter(h => h.username.toLowerCase().includes(searchTerm.toLowerCase()) || h.sistema_nome.toLowerCase().includes(searchTerm.toLowerCase()))
+                      .map(h => (
+                      <tr key={h.id}>
+                        <td><span className={`tag ${h.azione === 'CANCELLAZIONE' ? 'env-produzione' : 'env-sviluppo'}`}>{h.azione}</span></td>
+                        <td><span className="username">{h.username}</span></td>
+                        <td>{h.sistema_nome}</td>
+                        <td>{h.vault_version ? `#${h.vault_version}` : '-'}</td>
+                        <td>
+                          {h.password ? (
+                            <div className="secret-card" style={{padding:'2px 8px', background:'#f1f5f9', width:'fit-content'}}>
+                              <code>{h.password}</code>
+                              <button onClick={() => navigator.clipboard.writeText(h.password || '')} style={{padding:'2px', marginLeft:'4px'}}><Copy size={12}/></button>
                             </div>
-                            {h.password && (
-                              <div className="secret-card" style={{marginTop:'0.5rem', padding:'4px 8px', background:'#f1f5f9'}}>
-                                <code style={{fontSize:'0.9rem', color:'var(--accent)', fontWeight:600}}>{h.password}</code>
-                                <button onClick={() => navigator.clipboard.writeText(h.password || '')} style={{padding:'2px', marginLeft:'8px'}}><Copy size={12}/></button>
-                              </div>
-                            )}
-                          </div>
-                          <div style={{textAlign:'right', fontSize: '0.75rem', color: 'var(--text-muted)'}}>
-                            By {h.eseguito_da}
-                          </div>
-                        </div>
-                      </div>
+                          ) : 'N/A'}
+                        </td>
+                        <td><code className="code-path">{new Date(h.created_at).toLocaleString()}</code></td>
+                      </tr>
                     ))}
-                  </div>
-                )}
-              </div>
-            )}
+                  </tbody>
+                </table>
+              )}
+            </div>
           </div>
           )}
         </div>
@@ -527,8 +493,9 @@ function App() {
                 
                 <div className="change-pwd-area">
                   {!isChangingPwd ? (
-                    <div style={{display:'flex', gap:'1rem', marginTop:'0.5rem'}}>
+                    <div style={{display:'flex', flexWrap:'wrap', gap:'0.5rem', marginTop:'0.5rem'}}>
                       <button className="btn-text-small" onClick={() => setIsChangingPwd(true)}>Change Password?</button>
+                      <button className="btn-text-small" onClick={() => { setActiveTab('old'); setSearchTerm(selectedUtenza.username); }}>View Full History</button>
                       <button 
                         className="btn-text-small" 
                         style={{color: '#ef4444'}} 
