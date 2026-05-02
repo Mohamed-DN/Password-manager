@@ -1,11 +1,12 @@
-from contextlib import asynccontextmanager
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, Union, List
 from database import db, get_db_connection
 from vault import store_password, get_password, get_current_vault_version, get_password_by_version
 import json
+import auth
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -30,7 +31,23 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-async def log_action(azione: str, dettagli: Dict[str, Any], request: Request):
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login")
+
+async def get_current_user(token: str = Depends(oauth2_scheme)):
+    credentials_exception = HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Could not validate credentials",
+        headers={"WWW-Authenticate": "Bearer"},
+    )
+    payload = auth.decode_access_token(token)
+    if payload is None:
+        raise credentials_exception
+    username: str = payload.get("sub")
+    if username is None:
+        raise credentials_exception
+    return username
+
+async def log_action(azione: str, dettagli: Dict[str, Any], request: Request, operator: str = "SYSTEM"):
     """Salva un'azione nell'audit log."""
     async with get_db_connection() as conn:
         await conn.execute(
@@ -38,7 +55,7 @@ async def log_action(azione: str, dettagli: Dict[str, Any], request: Request):
             INSERT INTO audit_log (utente_operatore, azione, dettagli, ip_address)
             VALUES ($1, $2, $3, $4)
             """,
-            "SYSTEM_UI", # In futuro qui ci sarà l'utente loggato
+            operator,
             azione,
             json.dumps(dettagli),
             request.client.host
@@ -64,10 +81,49 @@ class Utenza(BaseModel):
 class PasswordResponse(BaseModel):
     password: str
 
+class LoginResponse(BaseModel):
+    access_token: str
+    token_type: str
+    username: str
+    full_name: str
+
+class SudoVerify(BaseModel):
+    password: str
+
+# --- Auth Endpoints ---
+
+@app.post("/api/auth/login", response_model=LoginResponse)
+async def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    async with get_db_connection() as conn:
+        user = await conn.fetchrow("SELECT * FROM dashboard_users WHERE username = $1", form_data.username)
+        if not user or not auth.verify_password(form_data.password, user['hashed_password']):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Incorrect username or password",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+        
+        access_token = auth.create_access_token(data={"sub": user['username']})
+        return {
+            "access_token": access_token, 
+            "token_type": "bearer", 
+            "username": user['username'],
+            "full_name": user['full_name'] or user['username']
+        }
+
+@app.post("/api/auth/verify-sudo")
+async def verify_sudo(data: SudoVerify, current_user: str = Depends(get_current_user)):
+    """Verifica la password dell'operatore per azioni sensibili (SUDO)."""
+    async with get_db_connection() as conn:
+        user = await conn.fetchrow("SELECT hashed_password FROM dashboard_users WHERE username = $1", current_user)
+        if not user or not auth.verify_password(data.password, user['hashed_password']):
+            raise HTTPException(status_code=403, detail="Sudo verification failed")
+        return {"status": "ok"}
+
 # --- Endpoints ---
 
 @app.get("/api/lookups")
-async def get_lookups():
+async def get_lookups(current_user: str = Depends(get_current_user)):
     """Recupera tutti i dati per i dropdown (ambienti, tecnologie, tipi, owners)."""
     async with get_db_connection() as conn:
         ambienti = await conn.fetch("SELECT * FROM ambienti")
@@ -84,14 +140,14 @@ async def get_lookups():
         }
 
 @app.get("/api/sistemi")
-async def get_sistemi():
+async def get_sistemi(current_user: str = Depends(get_current_user)):
     """Recupera tutti i sistemi target."""
     async with get_db_connection() as conn:
         rows = await conn.fetch("SELECT * FROM sistemi_target")
         return [dict(r) for r in rows]
 
 @app.post("/api/sistemi")
-async def create_sistema(sistema: SystemTarget):
+async def create_sistema(sistema: SystemTarget, current_user: str = Depends(get_current_user)):
     """Crea un nuovo sistema target."""
     async with get_db_connection() as conn:
         try:
@@ -108,14 +164,14 @@ async def create_sistema(sistema: SystemTarget):
             raise HTTPException(status_code=400, detail=str(e))
 
 @app.get("/api/utenze")
-async def get_utenze():
+async def get_utenze(current_user: str = Depends(get_current_user)):
     """Recupera tutte le utenze censite senza le password."""
     async with get_db_connection() as conn:
         rows = await conn.fetch("SELECT id, username, sistema_target_id, bao_owner_id, ticket_id, vault_path, attiva FROM utenze")
         return [dict(r) for r in rows]
 
 @app.post("/api/utenze")
-async def create_utenza(utenza: Utenza):
+async def create_utenza(utenza: Utenza, current_user: str = Depends(get_current_user)):
     """
     Crea un'utenza:
     1. Salva la password in OpenBao.
@@ -160,7 +216,7 @@ class UnifiedEntry(BaseModel):
     attributi_specifici: Dict[str, Any] = {}
 
 @app.post("/api/entry")
-async def create_unified_entry(entry: UnifiedEntry, request: Request):
+async def create_unified_entry(entry: UnifiedEntry, request: Request, current_user: str = Depends(get_current_user)):
     async with get_db_connection() as conn:
         async with conn.transaction():
             # 1. Gestione BAO Owner (Nuovo o Esistente)
@@ -202,14 +258,14 @@ async def create_unified_entry(entry: UnifiedEntry, request: Request):
                 entry.username, sistema_id, entry.tipo_utenza_id, bao_owner_id, ticket_id, vault_path, entry.attributi_specifici
             )
 
-            await log_action("CREATE_ENTRY", {"utenza_id": utenza_id, "username": entry.username, "sistema": entry.nome_sistema}, request)
+            await log_action("CREATE_ENTRY", {"utenza_id": utenza_id, "username": entry.username, "sistema": entry.nome_sistema}, request, operator=current_user)
             return {"message": "Dati salvati correttamente", "id": utenza_id}
 
 class PasswordUpdate(BaseModel):
     new_password: str
 
 @app.patch("/api/utenze/{utenza_id}/password")
-async def update_password(utenza_id: int, update: PasswordUpdate, request: Request):
+async def update_password(utenza_id: int, update: PasswordUpdate, request: Request, current_user: str = Depends(get_current_user)):
     """
     Aggiorna la password in OpenBao per un'utenza esistente.
     Prima di sovrascrivere, salva la versione precedente nello storico_password.
@@ -232,9 +288,9 @@ async def update_password(utenza_id: int, update: PasswordUpdate, request: Reque
             await conn.execute(
                 """
                 INSERT INTO storico_password (utenza_id, username, sistema_nome, vault_path, vault_version, azione, eseguito_da)
-                VALUES ($1, $2, $3, $4, $5, 'MODIFICA_PASSWORD', 'SYSTEM_UI')
+                VALUES ($1, $2, $3, $4, $5, 'MODIFICA_PASSWORD', $6)
                 """,
-                utenza_id, row['username'], sistema_nome, vault_path, old_version
+                utenza_id, row['username'], sistema_nome, vault_path, old_version, current_user
             )
         
         # 4. Aggiorna la password in Vault (crea nuova versione automaticamente)
@@ -243,11 +299,11 @@ async def update_password(utenza_id: int, update: PasswordUpdate, request: Reque
         if not success:
             raise HTTPException(status_code=500, detail="Errore aggiornamento Vault")
         
-        await log_action("CHANGE_PASSWORD", {"utenza_id": utenza_id, "username": row['username']}, request)
+        await log_action("CHANGE_PASSWORD", {"utenza_id": utenza_id, "username": row['username']}, request, operator=current_user)
         return {"message": "Password aggiornata con successo"}
 
 @app.get("/api/utenze/{utenza_id}/password", response_model=PasswordResponse)
-async def fetch_password(utenza_id: int, request: Request):
+async def fetch_password(utenza_id: int, request: Request, current_user: str = Depends(get_current_user)):
     """
     Recupera la password in chiaro interrogando Postgres per il path e Vault per il segreto.
     """
@@ -263,12 +319,12 @@ async def fetch_password(utenza_id: int, request: Request):
             raise HTTPException(status_code=500, detail="Segreto non trovato in OpenBao")
         
         # Logghiamo l'azione critica
-        await log_action("VIEW_PASSWORD", {"utenza_id": utenza_id, "username": row['username']}, request)
+        await log_action("VIEW_PASSWORD", {"utenza_id": utenza_id, "username": row['username']}, request, operator=current_user)
             
         return {"password": password}
 
 @app.get("/api/audit")
-async def get_audit_log():
+async def get_audit_log(current_user: str = Depends(get_current_user)):
     """Recupera le ultime 200 voci dell'audit log in ordine cronologico inverso."""
     async with get_db_connection() as conn:
         rows = await conn.fetch(
@@ -277,7 +333,7 @@ async def get_audit_log():
         return [dict(r) for r in rows]
 
 @app.delete("/api/utenze/{utenza_id}")
-async def delete_utenza(utenza_id: int, request: Request):
+async def delete_utenza(utenza_id: int, request: Request, current_user: str = Depends(get_current_user)):
     """
     Cancella logicamente un'utenza:
     1. Registra la versione corrente nello storico_password con azione CANCELLAZIONE
@@ -297,15 +353,15 @@ async def delete_utenza(utenza_id: int, request: Request):
             await conn.execute(
                 """
                 INSERT INTO storico_password (utenza_id, username, sistema_nome, vault_path, vault_version, azione, eseguito_da)
-                VALUES ($1, $2, $3, $4, $5, 'CANCELLAZIONE', 'SYSTEM_UI')
+                VALUES ($1, $2, $3, $4, $5, 'CANCELLAZIONE', $6)
                 """,
-                utenza_id, row['username'], sistema_nome, vault_path, current_version
+                utenza_id, row['username'], sistema_nome, vault_path, current_version, current_user
             )
         
         # 2. Soft-delete
         await conn.execute("UPDATE utenze SET deleted_at = CURRENT_TIMESTAMP WHERE id = $1", utenza_id)
         
-        await log_action("DELETE_USER", {"utenza_id": utenza_id, "username": row['username']}, request)
+        await log_action("DELETE_USER", {"utenza_id": utenza_id, "username": row['username']}, request, operator=current_user)
         return {"message": "Utenza cancellata con successo"}
 
 class PasswordHistoryEntry(BaseModel):
@@ -321,7 +377,7 @@ class PasswordHistoryEntry(BaseModel):
     created_at: str
 
 @app.get("/api/utenze/{utenza_id}/history")
-async def get_password_history(utenza_id: int):
+async def get_password_history(utenza_id: int, current_user: str = Depends(get_current_user)):
     """
     Recupera lo storico password per un'utenza.
     Per ogni voce, recupera anche la password effettiva da OpenBao usando vault_version.
@@ -350,7 +406,7 @@ async def get_password_history(utenza_id: int):
         return history
 
 @app.get("/api/utenze/cancellate")
-async def get_deleted_utenze():
+async def get_deleted_utenze(current_user: str = Depends(get_current_user)):
     """Recupera tutte le utenze cancellate (soft-delete)."""
     async with get_db_connection() as conn:
         rows = await conn.fetch(
@@ -359,7 +415,7 @@ async def get_deleted_utenze():
         return [dict(r) for r in rows]
 
 @app.get("/api/history/global")
-async def get_global_history():
+async def get_global_history(current_user: str = Depends(get_current_user)):
     """Recupera la cronologia globale di tutte le password (rotazioni e cancellazioni)."""
     async with get_db_connection() as conn:
         rows = await conn.fetch(

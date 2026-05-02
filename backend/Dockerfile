@@ -1,10 +1,15 @@
-FROM python:3.11-slim
+FROM node:22-alpine
 
 WORKDIR /app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY package*.json ./
+RUN npm install
 
 COPY . .
 
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Install tsx globally for dev or use the local one via npm scripts
+RUN npm install -g tsx typescript
+
+EXPOSE 8000
+
+CMD ["npm", "run", "dev"]
