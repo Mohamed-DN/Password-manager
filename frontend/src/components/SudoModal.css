@@ -1,0 +1,90 @@
+.sudo-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10000;
+  backdrop-filter: blur(5px);
+}
+
+.sudo-glass {
+  background: rgba(30, 40, 55, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 30px;
+  border-radius: 20px;
+  width: 100%;
+  max-width: 400px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.4);
+}
+
+.sudo-glass h3 {
+  margin: 0 0 10px;
+  color: #fff;
+  font-size: 20px;
+}
+
+.sudo-glass p {
+  margin: 0 0 20px;
+  color: #8899aa;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.sudo-field input {
+  width: 100%;
+  padding: 12px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  color: #fff;
+  font-size: 16px;
+  margin-bottom: 15px;
+  box-sizing: border-box;
+}
+
+.sudo-error {
+  color: #ff453a;
+  font-size: 13px;
+  margin-bottom: 15px;
+}
+
+.sudo-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+}
+
+.sudo-actions button {
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-cancel {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #8899aa;
+}
+
+.btn-cancel:hover {
+  background: rgba(255, 255, 255, 0.05);
+  color: #fff;
+}
+
+.btn-confirm {
+  background: #0070f3;
+  border: none;
+  color: #fff;
+}
+
+.btn-confirm:hover:not(:disabled) {
+  background: #0061d5;
+}

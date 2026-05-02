@@ -1,696 +1,210 @@
 import { useState, useEffect } from 'react'
-import axios from 'axios'
-import { 
-  Key, Shield, Database, X, Activity, 
-  Plus, Search, Terminal,
-  User, FileText,
-  Copy,
-  HardDrive, Cloud, Layers,
-  Database as DbIcon
-} from 'lucide-react'
-
-// --- Types ---
-interface Utenza {
-  id: number
-  username: string
-  sistema_target_id: number
-  vault_path: string
-  attiva: boolean
-  bao_owner_id: number
-  ticket_id: number | null
-  attributi_specifici?: Record<string, any>
-}
-
-interface Sistema {
-  id: number
-  nome_sistema: string
-  ambiente_id: number
-  tecnologia_id: number
-  configurazione: Record<string, any>
-}
-
-interface Lookups {
-  ambienti: {id: number, nome: string}[]
-  tecnologie: {id: number, nome: string}[]
-  tipi_utenza: {id: number, nome: string}[]
-  bao_owners: {id: number, nome: string, cognome: string}[]
-  ticket: any[]
-}
-
-interface AuditLog {
-  id: number
-  timestamp: string
-  utente_operatore: string
-  azione: string
-  dettagli: Record<string, any>
-  ip_address: string
-}
-
-interface PasswordHistoryEntry {
-  id: number
-  utenza_id: number
-  username: string
-  sistema_nome: string
-  vault_path: string
-  vault_version: number | null
-  azione: string
-  eseguito_da: string
-  note: string | null
-  created_at: string
-  password?: string | null
-}
-
-interface DeletedUtenza {
-  id: number
-  username: string
-  sistema_target_id: number
-  vault_path: string
-  deleted_at: string
-}
+import { useAuth } from './context/AuthContext'
+import { apiFetch } from './utils/api'
+import Sidebar from './components/Sidebar'
+import Header from './components/Header'
+import InventoryTable from './components/InventoryTable'
+import Login from './components/Login'
+import SudoModal from './components/SudoModal'
+import { Utenza, Sistema, Lookups, AuditLog, PasswordHistoryEntry, DeletedUtenza } from './types'
 
 function App() {
+  const { isAuthenticated, logout } = useAuth()
+  
+  const [activeTab, setActiveTab] = useState('inventory')
+  const [searchTerm, setSearchTerm] = useState('')
   const [utenze, setUtenze] = useState<Utenza[]>([])
   const [sistemi, setSistemi] = useState<Sistema[]>([])
   const [lookups, setLookups] = useState<Lookups | null>(null)
   const [auditLogs, setAuditLogs] = useState<AuditLog[]>([])
-  const [selectedUtenza, setSelectedUtenza] = useState<Utenza | null>(null)
-  const [password, setPassword] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [showModal, setShowModal] = useState<boolean>(false)
-  const [activeTab, setActiveTab] = useState<'inventory' | 'audit' | 'old'>('inventory')
-  const [searchTerm, setSearchTerm] = useState('')
-  const [filterUtenzaId, setFilterUtenzaId] = useState<number | null>(null)
-  const [revealedHistoryIds, setRevealedHistoryIds] = useState<Set<number>>(new Set())
-  
-  // Password history state
   const [passwordHistory, setPasswordHistory] = useState<PasswordHistoryEntry[]>([])
   const [deletedUtenze, setDeletedUtenze] = useState<DeletedUtenza[]>([])
-  const [selectedDeletedUtenza, setSelectedDeletedUtenza] = useState<DeletedUtenza | null>(null)
+  
+  const [loading, setLoading] = useState(true)
+  const [selectedUtenza, setSelectedUtenza] = useState<Utenza | null>(null)
+  const [revealedPassword, setRevealedPassword] = useState<string | null>(null)
+  const [showEntryModal, setShowEntryModal] = useState(false)
+  const [showSudoModal, setShowSudoModal] = useState(false)
+  const [sudoAction, setSudoAction] = useState<{ type: string, payload: any } | null>(null)
 
-  // Unified Form State
-  const [formData, setFormData] = useState({
-    tecnologia_id: 0,
-    ambiente_id: 0,
-    nome_sistema: '', // dbname
-    username: '',
-    password: '',
-    ticket_codice: '',
-    bao_owner_id: 0,
-    tipo_utenza_id: 2, // Applicativa
-    // Dynamic Fields
-    db_server: '',
-    host: '',
-    service_port: '5432',
-    hba_conf: '',
-    technology: '', // Cassandra/Couchbase
-    cluster_name: '',
-    compartment: '',
-    group: '',
-    bucket: ''
-  })
-
-  const [isChangingPwd, setIsChangingPwd] = useState(false)
-  const [newPasswordVal, setNewPasswordVal] = useState('')
-
-  const handleUpdatePassword = async () => {
-    if (!selectedUtenza || !newPasswordVal) return
-    try {
-      await axios.patch(`/api/utenze/${selectedUtenza.id}/password`, {
-        new_password: newPasswordVal
-      })
-      alert("Password updated successfully!")
-      setIsChangingPwd(false)
-      setNewPasswordVal('')
-    } catch (err) {
-      alert("Error: " + (err as any).message)
+  useEffect(() => {
+    if (isAuthenticated) {
+      fetchInitialData()
     }
-  }
+  }, [isAuthenticated])
 
-  const fetchData = async () => {
+  useEffect(() => {
+    if (isAuthenticated) {
+      if (activeTab === 'audit') fetchAuditLogs()
+      if (activeTab === 'history') fetchGlobalHistory()
+      if (activeTab === 'deleted') fetchDeletedUtenze()
+    }
+  }, [activeTab, isAuthenticated])
+
+  const fetchInitialData = async () => {
+    setLoading(true)
     try {
       const [resS, resU, resL] = await Promise.all([
-        axios.get('/api/sistemi'),
-        axios.get('/api/utenze'),
-        axios.get('/api/lookups')
+        apiFetch('/sistemi'),
+        apiFetch('/utenze'),
+        apiFetch('/lookups')
       ])
-      setSistemi(resS.data)
-      setUtenze(resU.data)
-      setLookups(resL.data)
+      setSistemi(await resS.json())
+      setUtenze(await resU.json())
+      setLookups(await resL.json())
     } catch (err) {
-      console.error("API Error:", err)
+      console.error(err)
     } finally {
       setLoading(false)
     }
   }
 
   const fetchAuditLogs = async () => {
-    try {
-      const res = await axios.get('/api/audit')
-      setAuditLogs(res.data)
-    } catch (err) {
-      console.error("Audit API Error:", err)
-    }
+    const res = await apiFetch('/audit')
+    setAuditLogs(await res.json())
+  }
+
+  const fetchGlobalHistory = async () => {
+    const res = await apiFetch('/history/global')
+    setPasswordHistory(await res.json())
   }
 
   const fetchDeletedUtenze = async () => {
-    try {
-      const res = await axios.get('/api/utenze/cancellate')
-      setDeletedUtenze(res.data)
-    } catch (err) {
-      console.error("Deleted Utenze API Error:", err)
-    }
+    const res = await apiFetch('/utenze/cancellate')
+    setDeletedUtenze(await res.json())
   }
 
-  const fetchPasswordHistory = async (utenza_id: number) => {
-    try {
-      const res = await axios.get(`/api/utenze/${utenza_id}/history`)
-      setPasswordHistory(res.data)
-    } catch (err) {
-      console.error("Password History API Error:", err)
-      setPasswordHistory([])
-    }
+  const handleRevealPassword = (id: number) => {
+    setSudoAction({ type: 'REVEAL', payload: id })
+    setShowSudoModal(true)
   }
 
-  useEffect(() => { fetchData() }, [])
-  useEffect(() => { 
-    if (activeTab === 'audit') fetchAuditLogs()
-    if (activeTab === 'old') {
-      // Fetch global history
-      const fetchGlobalHistory = async () => {
-        try {
-          const res = await axios.get('/api/history/global')
-          setPasswordHistory(res.data)
-        } catch (err) { console.error(err) }
-      }
-      fetchGlobalHistory()
-    }
-  }, [activeTab])
+  const handleRotatePassword = (id: number) => {
+    setSudoAction({ type: 'ROTATE', payload: id })
+    setShowSudoModal(true)
+  }
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault()
+  const handleDeleteUtenza = (id: number) => {
+    setSudoAction({ type: 'DELETE', payload: id })
+    setShowSudoModal(true)
+  }
+
+  const executeSudoAction = async () => {
+    if (!sudoAction) return
     
-    // Prepare JSONB payloads
-    const configurazione: Record<string, any> = {}
-    const attributi_specifici: Record<string, any> = {}
-
-    const techName = lookups?.tecnologie.find(t => t.id === formData.tecnologia_id)?.nome
-
-    if (techName === 'MySQL') {
-      configurazione.db_server = formData.db_server
-      attributi_specifici.host = formData.host
-    } else if (techName === 'Postgres') {
-      configurazione.db_server = formData.db_server
-      configurazione.service_port = formData.service_port
-      configurazione.hba_conf = formData.hba_conf
-    } else if (techName === 'OCI') {
-      configurazione.Compartment = formData.compartment
-      configurazione.Bucket = formData.bucket
-      attributi_specifici.Group = formData.group
-    } else if (techName === 'NoSQL') {
-      configurazione.technology = formData.technology
-      configurazione.Cluster_name = formData.cluster_name
-    }
+    setShowSudoModal(false)
+    const { type, payload } = sudoAction
 
     try {
-      await axios.post('/api/entry', {
-        nome_sistema: formData.nome_sistema,
-        ambiente_id: formData.ambiente_id,
-        tecnologia_id: formData.tecnologia_id,
-        configurazione,
-        username: formData.username,
-        password: formData.password,
-        tipo_utenza_id: formData.tipo_utenza_id,
-        bao_owner: formData.bao_owner_id,
-        ticket_codice: formData.ticket_codice,
-        attributi_specifici
-      })
-      setShowModal(false)
-      fetchData()
-      alert("Success: Asset stored securely!")
+      if (type === 'REVEAL') {
+        const res = await apiFetch(`/utenze/${payload}/password`)
+        const data = await res.json()
+        setRevealedPassword(data.password)
+        alert(`Password: ${data.password}`)
+      } else if (type === 'ROTATE') {
+        const newPwd = prompt("Inserisci la nuova password:")
+        if (newPwd) {
+          await apiFetch(`/utenze/${payload}/password`, {
+            method: 'PATCH',
+            body: JSON.stringify({ new_password: newPwd })
+          })
+          alert("Password ruotata con successo")
+          fetchInitialData()
+        }
+      } else if (type === 'DELETE') {
+        if (confirm("Sei sicuro di voler eliminare questa utenza?")) {
+          await apiFetch(`/utenze/${payload}`, { method: 'DELETE' })
+          alert("Utenza eliminata e archiviata")
+          fetchInitialData()
+        }
+      }
     } catch (err) {
-      const msg = (err as any).response?.data?.detail || (err as any).message || "Unknown error"
-      alert("Error: " + msg)
+      alert("Errore durante l'operazione")
+    } finally {
+      setSudoAction(null)
     }
   }
 
-  const fetchPassword = async (id: number) => {
-    try {
-      const res = await axios.get(`/api/utenze/${id}/password`)
-      setPassword(res.data.password)
-    } catch (err) {
-      alert("Vault error")
-    }
-  }
-
-  const getSys = (id: number) => sistemi.find(s => s.id === id)
-  const getTechName = (id: number) => lookups?.tecnologie.find(t => t.id === id)?.nome || 'Unknown'
-  const getEnvName = (id: number) => lookups?.ambienti.find(a => a.id === id)?.nome || 'Unknown'
-
-  if (loading) {
-    return (
-      <div className="loader-overlay">
-        <Activity className="spinner" size={48} />
-        <p>Initializing Secure Vault...</p>
-      </div>
-    )
+  if (!isAuthenticated) {
+    return <Login />
   }
 
   return (
     <div className="app-container">
-      {/* Sidebar Navigation */}
-      <aside className="app-sidebar">
-        <div className="sidebar-brand">
-          <div className="icon-glow">
-            <Shield size={24} fill="#60a5fa33" color="#60a5fa" />
-          </div>
-          <span>Nexi Vault</span>
-        </div>
+      <Sidebar activeTab={activeTab} setActiveTab={setActiveTab} />
+      
+      <main className="main-content">
+        <Header 
+          title={activeTab === 'inventory' ? 'Inventario Password' : 
+                 activeTab === 'audit' ? 'Audit Log' : 
+                 activeTab === 'history' ? 'Storico Password' : 'Utenze Archiviate'}
+          searchTerm={searchTerm}
+          setSearchTerm={setSearchTerm}
+          onNewEntry={() => setShowEntryModal(true)}
+        />
 
-        <nav className="sidebar-nav">
-          <button className={activeTab === 'inventory' ? 'active' : ''} onClick={() => setActiveTab('inventory')}>
-            <DbIcon size={18} /> Inventory
-          </button>
-          <button className={activeTab === 'audit' ? 'active' : ''} onClick={() => setActiveTab('audit')}>
-            <Terminal size={18} /> Audit Logs
-          </button>
-          <button className={activeTab === 'old' ? 'active' : ''} onClick={() => { setActiveTab('old'); setFilterUtenzaId(null); }}>
-            <FileText size={18} /> Old / Storico
-          </button>
-        </nav>
-
-        <div className="sidebar-bottom">
-          <div className="profile-card">
-            <div className="avatar">AD</div>
-            <div className="details">
-              <span className="user-name">Admin</span>
-              <span className="user-role">Superuser</span>
-            </div>
-          </div>
-        </div>
-      </aside>
-
-      {/* Main Area */}
-      <main className="app-main">
-        <header className="main-header">
-          <div className="header-search">
-            <Search size={18} />
-            <input 
-              type="text" 
-              placeholder="Search systems, tickets, users..." 
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
+        <div className="content-body">
+          {activeTab === 'inventory' && lookups && (
+            <InventoryTable 
+              utenze={utenze}
+              sistemi={sistemi}
+              lookups={lookups}
+              searchTerm={searchTerm}
+              onReveal={handleRevealPassword}
+              onRotate={handleRotatePassword}
+              onDelete={handleDeleteUtenza}
+              onViewHistory={(u) => { setActiveTab('history'); setSearchTerm(u.username); }}
             />
-          </div>
-          <button className="btn-primary" onClick={() => setShowModal(true)}>
-            <Plus size={18} /> New Entry
-          </button>
-        </header>
-
-        <div className="content-scroll">
-          <div className="page-intro">
-            <h1>
-              {activeTab === 'inventory' ? 'Asset Inventory' : 
-               activeTab === 'audit' ? 'Audit Logs' : 'Old / Password History'}
-            </h1>
-            <p>
-              {activeTab === 'inventory' ? 'Enterprise database credentials management with HashiCorp Vault encryption.' : 
-               activeTab === 'audit' ? 'Track every access and operation on sensitive credentials.' : 
-               'Review history of rotated or deleted passwords.'}
-            </p>
-          </div>
-
-          {activeTab === 'inventory' && (
-          <div className="inventory-card">
-            <table className="modern-table">
-              <thead>
-                <tr>
-                  <th>Username & System</th>
-                  <th>Environment</th>
-                  <th>Technology</th>
-                  <th>Vault Path</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody>
-                {utenze
-                  .filter(u => {
-                    const s = getSys(u.sistema_target_id);
-                    const match = u.username.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                                s?.nome_sistema.toLowerCase().includes(searchTerm.toLowerCase());
-                    return match;
-                  })
-                  .map(u => {
-                  const s = getSys(u.sistema_target_id)
-                  const tName = getTechName(s?.tecnologia_id || 0)
-                  const eName = getEnvName(s?.ambiente_id || 0)
-                  return (
-                    <tr key={u.id} onClick={() => { setSelectedUtenza(u); setPassword(null); }} className={selectedUtenza?.id === u.id ? 'selected' : ''}>
-                      <td>
-                        <div className="main-info">
-                          <span className="username">{u.username}</span>
-                          <span className="sysname">{s?.nome_sistema}</span>
-                        </div>
-                      </td>
-                      <td><span className={`tag env-${eName.toLowerCase()}`}>{eName}</span></td>
-                      <td>
-                        <div className="tech-info">
-                          {tName === 'Oracle' && <HardDrive size={14} color="#f97316" />}
-                          {tName === 'MySQL' && <Database size={14} color="#0ea5e9" />}
-                          {tName === 'Postgres' && <Database size={14} color="#334155" />}
-                          {tName === 'OCI' && <Cloud size={14} color="#ef4444" />}
-                          {tName === 'NoSQL' && <Layers size={14} color="#8b5cf6" />}
-                          <span>{tName}</span>
-                        </div>
-                      </td>
-                      <td><code className="code-path">{u.vault_path}</code></td>
-                      <td><div className="status-badge"><div className="dot active"></div> Active</div></td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
           )}
 
           {activeTab === 'audit' && (
-          <div className="inventory-card">
-            <table className="modern-table">
-              <thead>
-                <tr>
-                  <th>Timestamp</th>
-                  <th>Operator</th>
-                  <th>Action</th>
-                  <th>Details</th>
-                  <th>IP Address</th>
-                </tr>
-              </thead>
-              <tbody>
-                {auditLogs.length === 0 && (
-                  <tr><td colSpan={5} style={{textAlign:'center', padding:'2rem', color:'var(--text-muted)'}}>No audit log entries yet.</td></tr>
-                )}
-                {auditLogs
-                  .filter(log => JSON.stringify(log).toLowerCase().includes(searchTerm.toLowerCase()))
-                  .map(log => (
-                  <tr key={log.id}>
-                    <td><code className="code-path">{new Date(log.timestamp).toLocaleString()}</code></td>
-                    <td>{log.utente_operatore}</td>
-                    <td><span className="tag" style={{background:'#eff6ff', color:'var(--accent)'}}>{log.azione}</span></td>
-                    <td><code className="code-path">{JSON.stringify(log.dettagli)}</code></td>
-                    <td>{log.ip_address}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+            <div className="glass-panel">
+              <table className="modern-table">
+                <thead>
+                  <tr><th>Data</th><th>Operatore</th><th>Azione</th><th>Dettagli</th></tr>
+                </thead>
+                <tbody>
+                  {auditLogs.map(log => (
+                    <tr key={log.id}>
+                      <td>{new Date(log.timestamp).toLocaleString()}</td>
+                      <td>{log.utente_operatore}</td>
+                      <td>{log.azione}</td>
+                      <td className="text-sm font-mono">{JSON.stringify(log.dettagli)}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           )}
 
-          {activeTab === 'old' && (
-          <div className="inventory-card">
-            <div style={{display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1rem'}}>
-              <h3 style={{color: 'var(--text-muted)', fontSize: '0.9rem'}}>
-                {filterUtenzaId ? `Specific History for ID #${filterUtenzaId}` : 'Recent Password Rotations & Deletions'}
-              </h3>
-              {filterUtenzaId && (
-                <button className="btn-text-mini" onClick={() => setFilterUtenzaId(null)}>Clear Filter (Show All)</button>
-              )}
-            </div>
-            <div className="history-list">
-              {passwordHistory.length === 0 ? (
-                <div style={{textAlign:'center', padding:'3rem', color:'var(--text-muted)'}}>
-                   <Activity className="spinner" style={{marginBottom:'1rem'}}/>
-                   <p>No history records found.</p>
-                </div>
-              ) : (
-                <table className="modern-table">
-                  <thead>
-                    <tr>
-                      <th>Action</th>
-                      <th>Username</th>
-                      <th>System</th>
-                      <th>Environment</th>
-                      <th>Version</th>
-                      <th>Password (Old)</th>
-                      <th>Date</th>
+          {activeTab === 'history' && (
+            <div className="glass-panel">
+              <table className="modern-table">
+                <thead>
+                  <tr><th>Data</th><th>Username</th><th>Sistema</th><th>Versione</th><th>Azione</th></tr>
+                </thead>
+                <tbody>
+                  {passwordHistory.map(h => (
+                    <tr key={h.id}>
+                      <td>{new Date(h.created_at).toLocaleString()}</td>
+                      <td>{h.username}</td>
+                      <td>{h.sistema_nome}</td>
+                      <td>{h.vault_version}</td>
+                      <td>{h.azione}</td>
                     </tr>
-                  </thead>
-                  <tbody>
-                    {passwordHistory
-                      .filter(h => {
-                        if (filterUtenzaId && h.utenza_id !== filterUtenzaId) return false;
-                        return h.username.toLowerCase().includes(searchTerm.toLowerCase()) || h.sistema_nome.toLowerCase().includes(searchTerm.toLowerCase());
-                      })
-                      .map(h => {
-                        // Cerchiamo l'ambiente e tecnologia se possibile per mostrare tag
-                        const u = utenze.find(ut => ut.id === h.utenza_id)
-                        const s = getSys(u?.sistema_target_id || 0)
-                        const eName = getEnvName(s?.ambiente_id || 0)
-                        return (
-                        <tr key={h.id}>
-                          <td><span className={`tag ${h.azione === 'CANCELLAZIONE' ? 'env-produzione' : 'env-sviluppo'}`}>{h.azione}</span></td>
-                          <td><span className="username">{h.username}</span></td>
-                          <td>{h.sistema_nome}</td>
-                          <td>{eName !== 'Unknown' ? <span className={`tag env-${eName.toLowerCase()}`} style={{fontSize:'0.65rem'}}>{eName}</span> : '-'}</td>
-                          <td>{h.vault_version ? `#${h.vault_version}` : '-'}</td>
-                          <td>
-                          {h.password ? (
-                            <div className="secret-card" style={{padding:'2px 8px', background:'#f1f5f9', width:'fit-content', gap:'8px'}}>
-                              <code style={{fontFamily:'monospace'}}>
-                                {revealedHistoryIds.has(h.id) ? h.password : '••••••••'}
-                              </code>
-                              <div style={{display:'flex', gap:'4px'}}>
-                                <button 
-                                  title={revealedHistoryIds.has(h.id) ? "Hide" : "Show"}
-                                  onClick={() => {
-                                    const next = new Set(revealedHistoryIds);
-                                    if (next.has(h.id)) next.delete(h.id);
-                                    else next.add(h.id);
-                                    setRevealedHistoryIds(next);
-                                  }}
-                                  style={{padding:'2px', background:'transparent', border:'none', cursor:'pointer', color:'var(--text-muted)'}}
-                                >
-                                  <Activity size={12} />
-                                </button>
-                                <button 
-                                  title="Copy"
-                                  onClick={() => navigator.clipboard.writeText(h.password || '')} 
-                                  style={{padding:'2px', background:'transparent', border:'none', cursor:'pointer', color:'var(--text-muted)'}}
-                                >
-                                  <Copy size={12}/>
-                                </button>
-                              </div>
-                            </div>
-                          ) : 'N/A'}
-                        </td>
-                          <td><code className="code-path">{new Date(h.created_at).toLocaleString()}</code></td>
-                        </tr>
-                      )})
-                    }
-                  </tbody>
-                </table>
-              )}
+                  ))}
+                </tbody>
+              </table>
             </div>
-          </div>
           )}
         </div>
       </main>
 
-      {/* Details Panel */}
-      {selectedUtenza && (
-        <aside className="details-panel">
-          <div className="panel-header">
-            <h3>Asset Insight</h3>
-            <button className="close-btn" onClick={() => setSelectedUtenza(null)}><X size={20}/></button>
-          </div>
-          <div className="panel-body">
-             <div className="detail-box">
-                <label>Accountability</label>
-                <div className="row"><User size={16}/> {lookups?.bao_owners.find(o => o.id === selectedUtenza.bao_owner_id)?.nome} {lookups?.bao_owners.find(o => o.id === selectedUtenza.bao_owner_id)?.cognome}</div>
-                <div className="row"><FileText size={16}/> Ticket: {lookups?.ticket?.find(t => t.id === selectedUtenza.ticket_id)?.codice_ticket || 'N/A'}</div>
-             </div>
-
-             <div className="detail-box">
-                <label>JSONB Metadata</label>
-                <div className="json-list">
-                  {Object.entries({...(getSys(selectedUtenza.sistema_target_id)?.configurazione || {}), ...(selectedUtenza.attributi_specifici || {})}).map(([k, v]) => (
-                    <div key={k} className="json-row">
-                       <span className="k">{k}</span>
-                       <span className="v">{String(v)}</span>
-                    </div>
-                  ))}
-                </div>
-             </div>
-
-             <div className="detail-box credentials">
-                <label>Vault Secrets</label>
-                {!password ? (
-                  <button className="btn-reveal" onClick={() => fetchPassword(selectedUtenza.id)}>
-                    <Key size={16}/> Reveal Password
-                  </button>
-                ) : (
-                  <div className="secret-card">
-                    <span className="pwd">{password}</span>
-                    <button onClick={() => navigator.clipboard.writeText(password)}><Copy size={14}/></button>
-                  </div>
-                )}
-                
-                <div className="change-pwd-area">
-                  {!isChangingPwd ? (
-                    <div style={{display:'flex', flexWrap:'wrap', gap:'0.5rem', marginTop:'0.5rem'}}>
-                      <button className="btn-text-small" onClick={() => setIsChangingPwd(true)}>Change Password?</button>
-                      <button className="btn-text-small" onClick={() => { setActiveTab('old'); setFilterUtenzaId(selectedUtenza.id); setSearchTerm(''); }}>View Full History</button>
-                      <button 
-                        className="btn-text-small" 
-                        style={{color: '#ef4444'}} 
-                        onClick={async () => {
-                          if (window.confirm(`Are you sure you want to delete user ${selectedUtenza.username}? This will soft-delete the record and archive the password history.`)) {
-                            try {
-                              await axios.delete(`/api/utenze/${selectedUtenza.id}`)
-                              setSelectedUtenza(null)
-                              fetchData()
-                              alert("User deleted and archived.")
-                            } catch (err) {
-                              alert("Error: " + (err as any).message)
-                            }
-                          }
-                        }}
-                      >
-                        Delete User
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="pwd-input-group">
-                      <input type="password" placeholder="New password..." value={newPasswordVal} onChange={e => setNewPasswordVal(e.target.value)} />
-                      <div className="btns">
-                        <button className="btn-primary-mini" onClick={handleUpdatePassword}>Save</button>
-                        <button className="btn-text-mini" onClick={() => setIsChangingPwd(false)}>Cancel</button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-             </div>
-          </div>
-        </aside>
-      )}
-
-      {/* Unified Entry Modal */}
-      {showModal && (
-        <div className="modal-backdrop">
-          <div className="modal-content animate-in">
-            <header className="modal-header">
-              <div>
-                <h2>Create Unified Entry</h2>
-                <p>Add a new system and credential in one step.</p>
-              </div>
-              <button className="close-btn" onClick={() => setShowModal(false)}><X /></button>
-            </header>
-
-            <form className="modal-form" onSubmit={handleSubmit}>
-              <div className="form-grid">
-                {/* Stage 1: Core System Info */}
-                <div className="form-group">
-                  <label>Technology</label>
-                  <select required value={formData.tecnologia_id} onChange={e => setFormData({...formData, tecnologia_id: parseInt(e.target.value)})}>
-                    <option value="0">Select Tech...</option>
-                    {lookups?.tecnologie.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label>Environment</label>
-                  <select required value={formData.ambiente_id} onChange={e => setFormData({...formData, ambiente_id: parseInt(e.target.value)})}>
-                    <option value="0">Select Env...</option>
-                    {lookups?.ambienti.map(a => <option key={a.id} value={a.id}>{a.nome}</option>)}
-                  </select>
-                </div>
-
-                <div className="form-group">
-                  <label>DB Name / System Name</label>
-                  <input required list="existing-systems" placeholder="P1PDS2CBIP" value={formData.nome_sistema} onChange={e => setFormData({...formData, nome_sistema: e.target.value})} />
-                  <datalist id="existing-systems">
-                    {[...new Set(sistemi.map(s => s.nome_sistema))].map(name => <option key={name} value={name} />)}
-                  </datalist>
-                </div>
-
-                <div className="form-group">
-                   <label>Ticket ID</label>
-                   <input required placeholder="IRxxxxxxxx" value={formData.ticket_codice} onChange={e => setFormData({...formData, ticket_codice: e.target.value})} />
-                </div>
-
-                {/* Stage 2: User Info */}
-                <div className="form-group">
-                  <label>Username</label>
-                  <input required placeholder="PIPPO_SV" value={formData.username} onChange={e => setFormData({...formData, username: e.target.value})} />
-                </div>
-
-                <div className="form-group">
-                  <label>Password (to Vault)</label>
-                  <input required type="password" placeholder="••••••••" value={formData.password} onChange={e => setFormData({...formData, password: e.target.value})} />
-                </div>
-
-                <div className="form-group">
-                  <label>BAO Owner</label>
-                  <input required list="existing-owners" placeholder="Mario Rossi" 
-                    onChange={e => {
-                      const val = e.target.value;
-                      const owner = lookups?.bao_owners.find(o => `${o.nome} ${o.cognome}` === val);
-                      setFormData({...formData, bao_owner_id: owner ? owner.id : val as any});
-                    }} 
-                  />
-                  <datalist id="existing-owners">
-                    {lookups?.bao_owners.map(o => <option key={o.id} value={`${o.nome} ${o.cognome}`} />)}
-                  </datalist>
-                </div>
-                
-                <div className="form-group">
-                  <label>User Type</label>
-                  <select value={formData.tipo_utenza_id} onChange={e => setFormData({...formData, tipo_utenza_id: parseInt(e.target.value)})}>
-                     <option value="0">Select Type...</option>
-                     {lookups?.tipi_utenza.map(t => <option key={t.id} value={t.id}>{t.codice} - {t.descrizione}</option>)}
-                  </select>
-                </div>
-              </div>
-
-              {/* Dynamic Technology Fields */}
-              <div className="dynamic-fields">
-                <h3>Technology Specific Parameters</h3>
-                <div className="form-grid">
-                  {getTechName(formData.tecnologia_id) === 'MySQL' && (
-                    <>
-                      <div className="form-group"><label>DB Server</label><input value={formData.db_server} onChange={e => setFormData({...formData, db_server: e.target.value})} placeholder="mysqlapicbipe01" /></div>
-                      <div className="form-group"><label>Host Pattern</label><input value={formData.host} onChange={e => setFormData({...formData, host: e.target.value})} placeholder="% - hostname.domain.com" /></div>
-                    </>
-                  )}
-                  {getTechName(formData.tecnologia_id) === 'Postgres' && (
-                    <>
-                      <div className="form-group"><label>DB Server</label><input value={formData.db_server} onChange={e => setFormData({...formData, db_server: e.target.value})} /></div>
-                      <div className="form-group"><label>Service Port</label><input value={formData.service_port} onChange={e => setFormData({...formData, service_port: e.target.value})} /></div>
-                      <div className="form-group"><label>HBA Config</label><input value={formData.hba_conf} onChange={e => setFormData({...formData, hba_conf: e.target.value})} /></div>
-                    </>
-                  )}
-                  {getTechName(formData.tecnologia_id) === 'OCI' && (
-                    <>
-                      <div className="form-group"><label>Compartment</label><input value={formData.compartment} onChange={e => setFormData({...formData, compartment: e.target.value})} /></div>
-                      <div className="form-group"><label>Group</label><input value={formData.group} onChange={e => setFormData({...formData, group: e.target.value})} /></div>
-                      <div className="form-group"><label>Bucket</label><input value={formData.bucket} onChange={e => setFormData({...formData, bucket: e.target.value})} /></div>
-                    </>
-                  )}
-                  {getTechName(formData.tecnologia_id) === 'NoSQL' && (
-                    <>
-                      <div className="form-group"><label>Technology Type</label><select value={formData.technology} onChange={e => setFormData({...formData, technology: e.target.value})}><option value="">Select...</option><option value="Cassandra">Cassandra</option><option value="Couchbase">Couchbase</option></select></div>
-                      <div className="form-group"><label>Cluster Name</label><input value={formData.cluster_name} onChange={e => setFormData({...formData, cluster_name: e.target.value})} placeholder="Es: Hub Fisico" /></div>
-                    </>
-                  )}
-                  {!formData.tecnologia_id && <div className="hint-text">Select a technology to see specific options.</div>}
-                </div>
-              </div>
-
-              <footer className="modal-footer">
-                 <button type="button" className="btn-text" onClick={() => setShowModal(false)}>Cancel</button>
-                 <button type="submit" className="btn-primary" disabled={!formData.tecnologia_id}>Securely Store Entry</button>
-              </footer>
-            </form>
-          </div>
-        </div>
+      {showSudoModal && (
+        <SudoModal 
+          onConfirm={executeSudoAction}
+          onCancel={() => { setShowSudoModal(false); setSudoAction(null); }}
+        />
       )}
     </div>
   )

@@ -158,7 +158,65 @@ CREATE TABLE audit_log (
     ip_address      VARCHAR(45)
 );
 
--- 9. INDICI E POPOLAMENTO BASE
+-- 9. BETTER AUTH TABLES
+CREATE TABLE "user" (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    email TEXT NOT NULL UNIQUE,
+    "emailVerified" BOOLEAN NOT NULL,
+    image TEXT,
+    "createdAt" TIMESTAMP NOT NULL,
+    "updatedAt" TIMESTAMP NOT NULL
+);
+
+CREATE TABLE session (
+    id TEXT PRIMARY KEY,
+    "expiresAt" TIMESTAMP NOT NULL,
+    token TEXT NOT NULL UNIQUE,
+    "createdAt" TIMESTAMP NOT NULL,
+    "updatedAt" TIMESTAMP NOT NULL,
+    "ipAddress" TEXT,
+    "userAgent" TEXT,
+    "userId" TEXT NOT NULL REFERENCES "user"(id)
+);
+
+CREATE TABLE account (
+    id TEXT PRIMARY KEY,
+    "accountId" TEXT NOT NULL,
+    "providerId" TEXT NOT NULL,
+    "userId" TEXT NOT NULL REFERENCES "user"(id),
+    "accessToken" TEXT,
+    "refreshToken" TEXT,
+    "idToken" TEXT,
+    "accessTokenExpiresAt" TIMESTAMP,
+    "refreshTokenExpiresAt" TIMESTAMP,
+    scope TEXT,
+    password TEXT,
+    "createdAt" TIMESTAMP NOT NULL,
+    "updatedAt" TIMESTAMP NOT NULL
+);
+
+CREATE TABLE verification (
+    id TEXT PRIMARY KEY,
+    identifier TEXT NOT NULL,
+    value TEXT NOT NULL,
+    "expiresAt" TIMESTAMP NOT NULL,
+    "createdAt" TIMESTAMP,
+    "updatedAt" TIMESTAMP
+);
+
+-- Inserimento utente admin (Password: Sole_2482002)
+-- L'ID è un UUID casuale per Better Auth
+-- Password hashata da Better Auth (scrypt di default, ma qui inseriamo una stringa che Better Auth riconoscerà)
+-- Per semplicità, Better Auth gestirà l'hash. 
+-- Inseriamo un utente con una password pre-hashata compatibile.
+INSERT INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
+VALUES ('admin-uuid-123', 'Administrator', 'admin@nexivault.local', true, NOW(), NOW());
+
+INSERT INTO account (id, "accountId", "providerId", "userId", password, "createdAt", "updatedAt")
+VALUES ('admin-account-uuid', 'admin@nexivault.local', 'email', 'admin-uuid-123', '$2b$12$dbcovlVtgWMcT2wT4vww1.9fPnOQTtg0NCt9NJ/XU8Juh/7Mle/RW', NOW(), NOW());
+
+-- 10. INDICI E POPOLAMENTO BASE
 CREATE INDEX idx_sistemi_configurazione ON sistemi_target USING GIN (configurazione);
 CREATE INDEX idx_utenze_attributi ON utenze USING GIN (attributi_specifici);
 CREATE INDEX idx_utenze_sistema ON utenze(sistema_target_id);

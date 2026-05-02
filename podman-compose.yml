@@ -150,10 +150,14 @@ services:
       - DB_PASSWORD=PasswordBackend123!
       - DB_NAME=vault_inventory_db
       - DB_SCHEMA=inventory
+      - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET}
+      - BETTER_AUTH_URL=${BETTER_AUTH_URL}
+    env_file:
+      - .env
     volumes:
       - vault_init:/vault/init:ro
       - ./backend:/app:z
-    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+      - /app/node_modules
     restart: unless-stopped
 
   # =========================================================================
