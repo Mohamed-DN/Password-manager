@@ -164,16 +164,15 @@ services:
   # Frontend
   # =========================================================================
   frontend:
-    image: docker.io/node:22-alpine
+    image: docker.io/nginx:alpine
     container_name: inventory-ui
-    working_dir: /app
     volumes:
-      - ./frontend:/app:z
+      - ./frontend/dist:/usr/share/nginx/html:z,ro
+      - ./frontend/nginx.conf:/etc/nginx/conf.d/default.conf:z,ro
     ports:
-      - "5173:5173"
+      - "5174:5173"
     depends_on:
       - backend
-    command: sh -c "npm install && npm run dev -- --host 0.0.0.0"
     restart: unless-stopped
 
   # =========================================================================
