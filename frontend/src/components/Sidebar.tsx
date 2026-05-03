@@ -10,17 +10,17 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => {
   const { fullName, logout } = useAuth();
 
   const menuItems = [
-    { id: 'dashboard', label: 'Dashboard', icon: 'ðŸ“Š' },
-    { id: 'inventory', label: 'Inventario Password', icon: 'ðŸ”‘' },
-    { id: 'audit', label: 'Audit Log', icon: 'ðŸ“–' },
-    { id: 'history', label: 'Storico Globale', icon: 'ðŸ•’' },
-    { id: 'deleted', label: 'Utenze Cancellate', icon: 'ðŸ—‘ï¸' },
+    { id: 'dashboard', label: 'Dashboard', icon: '' },
+    { id: 'inventory', label: 'Inventario Password', icon: '' },
+    { id: 'audit', label: 'Audit Log', icon: '' },
+    { id: 'history', label: 'Storico Globale', icon: '' },
+    { id: 'deleted', label: 'Utenze Cancellate', icon: '' },
   ];
 
   return (
     <aside className="sidebar">
       <div className="sidebar-brand">
-        <span className="logo-icon">ðŸ”’</span>
+        <span className="logo-icon"></span>
         <h2>Nexi Vault</h2>
       </div>
       
@@ -46,7 +46,7 @@ const Sidebar: React.FC<SidebarProps> = ({ activeTab, setActiveTab }) => {
           </div>
         </div>
         <button className="logout-btn" onClick={logout}>
-          <span>ðŸšª</span> Esci
+          <span></span> Esci
         </button>
       </div>
     </aside>
