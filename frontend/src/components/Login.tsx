@@ -36,7 +36,7 @@ const Login: React.FC = () => {
     <div className="login-container">
       <div className="login-glass">
         <div className="login-logo">
-          <span className="logo-icon">ðŸ”’</span>
+          <span className="logo-icon"></span>
           <h1>Nexi Vault</h1>
           <p>Inventory & Secret Manager</p>
           <div className="badge-premium">POWERED BY BETTER AUTH</div>

@@ -24,7 +24,7 @@ services:
   # PostgreSQL — PRIMARY
   # =========================================================================
   postgres:
-    image: docker.io/postgres:16-alpine
+    image: docker.io/library/postgres:16-alpine
     container_name: inventory-db
     environment:
       POSTGRES_DB: vault_inventory_db
@@ -65,7 +65,7 @@ services:
   # primary — the standby configuration is the same in both cases.
   # =========================================================================
   postgres-replica:
-    image: docker.io/postgres:16-alpine
+    image: docker.io/library/postgres:16-alpine
     container_name: inventory-db-replica
     entrypoint: ["/bin/bash", "/scripts/init-replica.sh"]
     environment:
@@ -150,25 +150,19 @@ services:
       - DB_PASSWORD=PasswordBackend123!
       - DB_NAME=vault_inventory_db
       - DB_SCHEMA=inventory
-      - BETTER_AUTH_SECRET=${BETTER_AUTH_SECRET}
-      - BETTER_AUTH_URL=${BETTER_AUTH_URL}
+      - JWT_SECRET_KEY=${JWT_SECRET_KEY:-79637a7a6964612d64617368626f6172642d736563726574}
     env_file:
       - .env
     volumes:
       - vault_init:/vault/init:ro
-      - ./backend:/app:z
-      - /app/node_modules
     restart: unless-stopped
 
   # =========================================================================
   # Frontend
   # =========================================================================
   frontend:
-    image: docker.io/nginx:alpine
+    build: ./frontend
     container_name: inventory-ui
-    volumes:
-      - ./frontend/dist:/usr/share/nginx/html:z,ro
-      - ./frontend/nginx.conf:/etc/nginx/conf.d/default.conf:z,ro
     ports:
       - "5174:5173"
     depends_on:
