@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from pydantic import BaseModel
 from typing import Optional, Dict, Any, Union, List
+from contextlib import asynccontextmanager
 from database import db, get_db_connection
 from vault import store_password, get_password, get_current_vault_version, get_password_by_version
 import json

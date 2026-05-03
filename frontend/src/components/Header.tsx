@@ -16,7 +16,7 @@ const Header: React.FC<HeaderProps> = ({ title, searchTerm, setSearchTerm, onNew
       
       <div className="header-actions">
         <div className="search-bar">
-          <span className="search-icon">ðŸ”</span>
+          <span className="search-icon"></span>
           <input 
             type="text" 
             placeholder="Cerca sistemi, utenti..." 

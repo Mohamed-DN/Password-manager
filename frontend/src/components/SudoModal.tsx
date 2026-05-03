@@ -20,7 +20,7 @@ const SudoModal: React.FC<SudoModalProps> = ({ onConfirm, onCancel, title, messa
     setError('');
 
     try {
-      // Per Better Auth, possiamo usare signIn.email per verificare se la sessione è ancora valida
+      // Per Better Auth, possiamo usare signIn.email per verificare se la sessione  ancora valida
       // oppure usare una funzione custom. In Better Auth, il re-auth si fa solitamente con i plugin.
       // Per ora, simuliamo la verifica ri-autenticando l'utente corrente.
       const session = await authClient.getSession();
@@ -32,7 +32,7 @@ const SudoModal: React.FC<SudoModalProps> = ({ onConfirm, onCancel, title, messa
       });
 
       if (error) {
-        setError('Password non corretta. Verifica identitÃ  fallita.');
+        setError('Password non corretta. Verifica identita fallita.');
       } else {
         onConfirm();
       }
@@ -46,7 +46,7 @@ const SudoModal: React.FC<SudoModalProps> = ({ onConfirm, onCancel, title, messa
   return (
     <div className="sudo-overlay">
       <div className="sudo-glass">
-        <h3>{title || 'Verifica IdentitÃ '}</h3>
+        <h3>{title || 'Verifica Identita'}</h3>
         <p>{message || 'Per procedere con questa operazione sensibile, inserisci la tua password di accesso.'}</p>
         
         <form onSubmit={handleSubmit}>

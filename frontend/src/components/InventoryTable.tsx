@@ -54,10 +54,10 @@ const InventoryTable: React.FC<InventoryTableProps> = ({
               </td>
               <td className="font-mono text-sm">{u.vault_path}</td>
               <td className="actions-cell">
-                <button className="icon-btn" onClick={() => onReveal(u.id)} title="Rivela Password">ðŸ‘ </button>
-                <button className="icon-btn" onClick={() => onRotate(u.id)} title="Ruota Password">ðŸ”„</button>
-                <button className="icon-btn" onClick={() => onViewHistory(u)} title="Cronologia">ðŸ•’</button>
-                <button className="icon-btn btn-danger" onClick={() => onDelete(u.id)} title="Elimina">ðŸ—‘ï¸ </button>
+                <button className="icon-btn" onClick={() => onReveal(u.id)} title="Rivela Password"> </button>
+                <button className="icon-btn" onClick={() => onRotate(u.id)} title="Ruota Password"></button>
+                <button className="icon-btn" onClick={() => onViewHistory(u)} title="Cronologia"></button>
+                <button className="icon-btn btn-danger" onClick={() => onDelete(u.id)} title="Elimina"> </button>
               </td>
             </tr>
           ))}
