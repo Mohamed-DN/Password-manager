@@ -175,6 +175,15 @@ INSERT INTO ambienti (nome) VALUES ('PRODUZIONE'), ('PREPRODUZIONE'), ('COLLAUDO
 INSERT INTO tecnologie (nome, descrizione) VALUES ('Oracle', 'Database Oracle'), ('MySQL', 'Database MySQL'), ('Postgres', 'Database PostgreSQL'), ('OCI', 'Oracle Cloud Infrastructure'), ('NoSQL', 'Database NoSQL (Cassandra/Couchbase)');
 INSERT INTO tipi_utenza (codice, descrizione) VALUES ('OBJ', 'Utenza Owner/Schema'), ('SV', 'Utenza Applicativa'), ('NOMINALE', 'Utenza Nominale Personale');
 
+-- Inserimento Dati Fittizi per Test
+INSERT INTO bao_owners (nome, cognome, email, matricola) VALUES 
+('Mario', 'Rossi', 'mario.rossi@nexivault.local', 'NX001'),
+('Luigi', 'Bianchi', 'luigi.bianchi@nexivault.local', 'NX002');
+
+INSERT INTO sistemi_target (nome_sistema, ambiente_id, tecnologia_id, descrizione) VALUES
+('CRM_DB_CORE', 1, 1, 'Database Centrale CRM in Produzione'),
+('PORTALE_WEB_DB', 4, 3, 'Database Portale Web in Sviluppo');
+
 RESET ROLE;
 
 -- =========================================================================
