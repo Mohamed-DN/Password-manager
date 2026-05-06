@@ -11,6 +11,7 @@ CREATE ROLE replicator WITH REPLICATION LOGIN PASSWORD 'ReplicaPassword123!';
 -- 2. Schema
 CREATE SCHEMA inventory AUTHORIZATION inventory_admin;
 REVOKE ALL ON SCHEMA public FROM PUBLIC;
+GRANT USAGE, CREATE ON SCHEMA public TO inventory_app;
 GRANT USAGE ON SCHEMA inventory TO inventory_app;
 GRANT USAGE ON SCHEMA inventory TO inventory_read;
 
@@ -20,7 +21,7 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA inventory FOR ROLE inventory_admin GRANT USAG
 ALTER DEFAULT PRIVILEGES IN SCHEMA inventory FOR ROLE inventory_admin GRANT SELECT ON TABLES TO inventory_read;
 
 ALTER ROLE inventory_admin SET search_path TO inventory;
-ALTER ROLE inventory_app SET search_path TO inventory;
+ALTER ROLE inventory_app SET search_path TO public, inventory;
 ALTER ROLE inventory_read SET search_path TO inventory;
 
 -- Impostiamo il ruolo a inventory_admin per creare gli oggetti
@@ -159,64 +160,10 @@ CREATE TABLE audit_log (
 );
 
 -- 9. BETTER AUTH TABLES
-CREATE TABLE "user" (
-    id TEXT PRIMARY KEY,
-    name TEXT NOT NULL,
-    email TEXT NOT NULL UNIQUE,
-    "emailVerified" BOOLEAN NOT NULL,
-    image TEXT,
-    "createdAt" TIMESTAMP NOT NULL,
-    "updatedAt" TIMESTAMP NOT NULL
-);
+-- NOTE: These are created AFTER RESET ROLE so they go into public schema.
+-- Better Auth requires these in the public/default schema.
 
-CREATE TABLE session (
-    id TEXT PRIMARY KEY,
-    "expiresAt" TIMESTAMP NOT NULL,
-    token TEXT NOT NULL UNIQUE,
-    "createdAt" TIMESTAMP NOT NULL,
-    "updatedAt" TIMESTAMP NOT NULL,
-    "ipAddress" TEXT,
-    "userAgent" TEXT,
-    "userId" TEXT NOT NULL REFERENCES "user"(id)
-);
-
-CREATE TABLE account (
-    id TEXT PRIMARY KEY,
-    "accountId" TEXT NOT NULL,
-    "providerId" TEXT NOT NULL,
-    "userId" TEXT NOT NULL REFERENCES "user"(id),
-    "accessToken" TEXT,
-    "refreshToken" TEXT,
-    "idToken" TEXT,
-    "accessTokenExpiresAt" TIMESTAMP,
-    "refreshTokenExpiresAt" TIMESTAMP,
-    scope TEXT,
-    password TEXT,
-    "createdAt" TIMESTAMP NOT NULL,
-    "updatedAt" TIMESTAMP NOT NULL
-);
-
-CREATE TABLE verification (
-    id TEXT PRIMARY KEY,
-    identifier TEXT NOT NULL,
-    value TEXT NOT NULL,
-    "expiresAt" TIMESTAMP NOT NULL,
-    "createdAt" TIMESTAMP,
-    "updatedAt" TIMESTAMP
-);
-
--- Inserimento utente admin (Password: Sole_2482002)
--- L'ID è un UUID casuale per Better Auth
--- Password hashata da Better Auth (scrypt di default, ma qui inseriamo una stringa che Better Auth riconoscerà)
--- Per semplicità, Better Auth gestirà l'hash. 
--- Inseriamo un utente con una password pre-hashata compatibile.
-INSERT INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
-VALUES ('admin-uuid-123', 'Administrator', 'admin@nexivault.local', true, NOW(), NOW());
-
-INSERT INTO account (id, "accountId", "providerId", "userId", password, "createdAt", "updatedAt")
-VALUES ('admin-account-uuid', 'admin@nexivault.local', 'email', 'admin-uuid-123', '$2b$12$dbcovlVtgWMcT2wT4vww1.9fPnOQTtg0NCt9NJ/XU8Juh/7Mle/RW', NOW(), NOW());
-
--- 10. INDICI E POPOLAMENTO BASE
+-- 10. INDICI E POPOLAMENTO BASE (inventory schema)
 CREATE INDEX idx_sistemi_configurazione ON sistemi_target USING GIN (configurazione);
 CREATE INDEX idx_utenze_attributi ON utenze USING GIN (attributi_specifici);
 CREATE INDEX idx_utenze_sistema ON utenze(sistema_target_id);
@@ -229,3 +176,66 @@ INSERT INTO tecnologie (nome, descrizione) VALUES ('Oracle', 'Database Oracle'),
 INSERT INTO tipi_utenza (codice, descrizione) VALUES ('OBJ', 'Utenza Owner/Schema'), ('SV', 'Utenza Applicativa'), ('NOMINALE', 'Utenza Nominale Personale');
 
 RESET ROLE;
+
+-- =========================================================================
+-- Better Auth tables — MUST be in public schema
+-- The admin user is created by the backend on first startup via
+-- auth.api.signUpEmail() with the correct scrypt password hash.
+-- =========================================================================
+SET search_path TO public;
+
+CREATE TABLE IF NOT EXISTS "user" (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    email TEXT NOT NULL UNIQUE,
+    "emailVerified" BOOLEAN NOT NULL DEFAULT false,
+    image TEXT,
+    "createdAt" TIMESTAMP NOT NULL DEFAULT NOW(),
+    "updatedAt" TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS session (
+    id TEXT PRIMARY KEY,
+    "expiresAt" TIMESTAMP NOT NULL,
+    token TEXT NOT NULL UNIQUE,
+    "createdAt" TIMESTAMP NOT NULL DEFAULT NOW(),
+    "updatedAt" TIMESTAMP NOT NULL DEFAULT NOW(),
+    "ipAddress" TEXT,
+    "userAgent" TEXT,
+    "userId" TEXT NOT NULL REFERENCES "user"(id)
+);
+
+CREATE TABLE IF NOT EXISTS account (
+    id TEXT PRIMARY KEY,
+    "accountId" TEXT NOT NULL,
+    "providerId" TEXT NOT NULL,
+    "userId" TEXT NOT NULL REFERENCES "user"(id),
+    "accessToken" TEXT,
+    "refreshToken" TEXT,
+    "idToken" TEXT,
+    "accessTokenExpiresAt" TIMESTAMP,
+    "refreshTokenExpiresAt" TIMESTAMP,
+    scope TEXT,
+    password TEXT,
+    "createdAt" TIMESTAMP NOT NULL DEFAULT NOW(),
+    "updatedAt" TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS verification (
+    id TEXT PRIMARY KEY,
+    identifier TEXT NOT NULL,
+    value TEXT NOT NULL,
+    "expiresAt" TIMESTAMP NOT NULL,
+    "createdAt" TIMESTAMP DEFAULT NOW(),
+    "updatedAt" TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS jwks (
+    id TEXT PRIMARY KEY,
+    "publicKey" TEXT NOT NULL,
+    "privateKey" TEXT NOT NULL,
+    "createdAt" TIMESTAMP NOT NULL DEFAULT NOW()
+);
+
+-- Grant inventory_app full access to Better Auth tables
+GRANT ALL PRIVILEGES ON TABLE "user", session, account, verification, jwks TO inventory_app;

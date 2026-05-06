@@ -1,6 +1,7 @@
 {
   "name": "inventory-backend-ts",
   "version": "1.0.0",
+  "type": "module",
   "description": "Nexi Vault Backend - TypeScript Version",
   "main": "src/index.ts",
   "scripts": {
@@ -9,18 +10,18 @@
     "build": "tsc"
   },
   "dependencies": {
-    "@hono/node-server": "^1.10.1",
+    "@hono/node-server": "^1.19.14",
     "better-auth": "^1.6.9",
-    "dotenv": "^16.4.5",
-    "hono": "^4.2.3",
+    "dotenv": "^16.6.1",
+    "hono": "^4.12.16",
     "node-vault": "^0.10.2",
-    "pg": "^8.11.5",
-    "zod": "^3.22.4"
+    "pg": "^8.20.0",
+    "zod": "^3.25.76"
   },
   "devDependencies": {
-    "@types/node": "^20.12.7",
-    "@types/pg": "^8.11.5",
-    "tsx": "^4.7.2",
-    "typescript": "^5.4.5"
+    "@types/node": "^20.19.39",
+    "@types/pg": "^8.20.0",
+    "tsx": "^4.21.0",
+    "typescript": "^5.9.3"
   }
 }
