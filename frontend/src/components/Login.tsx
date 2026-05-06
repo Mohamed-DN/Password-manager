@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
-import { authClient } from '../utils/auth-client';
-import './Login.css';
+import { authClient } from '../auth-client';
 
-const Login: React.FC = () => {
-  const [email, setEmail] = useState(''); // Better Auth usa email di default
-  const [password, setPassword] = useState('');
+export default function Login() {
+  const [email, setEmail] = useState('admin@nexivault.local');
+  const [password, setPassword] = useState('Sole_2482002');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -14,70 +13,78 @@ const Login: React.FC = () => {
     setError('');
 
     try {
-      const { data, error } = await authClient.signIn.email({
+      const { error } = await authClient.signIn.email({
         email,
         password,
       });
 
       if (error) {
-        setError(error.message || 'Credenziali non valide');
+        setError(error.message || 'Invalid credentials');
       } else {
-        // Il client gestisce sessione e redirect automaticamente se configurato
         window.location.reload();
       }
     } catch (err) {
-      setError('Errore di connessione al server');
+      setError('Connection error');
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="login-container">
-      <div className="login-glass">
-        <div className="login-logo">
-          <span className="logo-icon"></span>
-          <h1>Nexi Vault</h1>
-          <p>Inventory & Secret Manager</p>
-          <div className="badge-premium">POWERED BY BETTER AUTH</div>
+    <div className="full-center" style={{ 
+      backgroundImage: 'url("https://images.unsplash.com/photo-1550751827-4bd374c3f58b?q=80&w=2070&auto=format&fit=crop")',
+      backgroundSize: 'cover',
+      backgroundPosition: 'center'
+    }}>
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(10, 10, 12, 0.85)' }}></div>
+      
+      <div className="glass-card" style={{ width: '100%', maxWidth: '420px', position: 'relative', zIndex: 10, borderTop: '2px solid rgba(99, 102, 241, 0.5)' }}>
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginBottom: '32px' }}>
+          <div className="logo-glow" style={{ width: '56px', height: '56px', borderRadius: '16px', marginBottom: '20px', fontSize: '32px' }}>
+            🔒
+          </div>
+          <h1 style={{ fontSize: '28px', color: 'white', marginBottom: '8px' }}>Nexi Vault</h1>
+          <p style={{ color: 'var(--text-muted)' }}>Secure Enterprise Identity</p>
         </div>
-        
-        <form onSubmit={handleSubmit} className="login-form">
-          <div className="form-group">
-            <label>Email / Username</label>
-            <input 
-              type="email" 
-              value={email} 
-              onChange={(e) => setEmail(e.target.value)} 
-              placeholder="admin@nexivault.local"
-              required 
-            />
+
+        <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+          <div>
+            <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: 'var(--text-muted)' }}>Email Address</label>
+            <div style={{ position: 'relative' }}>
+              <input 
+                type="email" 
+                value={email} 
+                onChange={(e) => setEmail(e.target.value)} 
+                required 
+              />
+            </div>
           </div>
           
-          <div className="form-group">
-            <label>Password</label>
-            <input 
-              type="password" 
-              value={password} 
-              onChange={(e) => setPassword(e.target.value)} 
-              placeholder="Inserisci password"
-              required 
-            />
+          <div>
+            <label style={{ display: 'block', marginBottom: '8px', fontSize: '14px', color: 'var(--text-muted)' }}>Password</label>
+            <div style={{ position: 'relative' }}>
+              <input 
+                type="password" 
+                value={password} 
+                onChange={(e) => setPassword(e.target.value)} 
+                required 
+              />
+            </div>
           </div>
           
-          {error && <div className="login-error">{error}</div>}
+          {error && (
+            <div style={{ padding: '12px', background: 'rgba(239, 68, 68, 0.1)', borderLeft: '3px solid var(--danger)', borderRadius: '4px', fontSize: '14px', color: 'var(--danger)' }}>
+              {error}
+            </div>
+          )}
           
-          <button type="submit" className="login-button" disabled={loading}>
-            {loading ? 'Accesso in corso...' : 'Accedi'}
+          <button type="submit" className="btn-primary" disabled={loading} style={{ marginTop: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px' }}>
+            {loading ? <div className="spinner"></div> : (
+              <>Sign In ➔</>
+            )}
           </button>
         </form>
-        
-        <div className="login-footer">
-          &copy; 2026 Nexi Group | Enterprise Security
-        </div>
       </div>
     </div>
   );
-};
-
-export default Login;
+}
