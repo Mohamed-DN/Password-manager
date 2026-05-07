@@ -63,10 +63,30 @@ app.get("/api/lookups/sistemi", authMiddleware, async (c) => {
 
 app.get("/api/utenze", authMiddleware, async (c) => {
   try {
-    const res = await query("SELECT id, username, sistema_target_id, tipo_utenza_id, bao_owner_id, ticket_id, vault_path, attiva, note, created_by, created_at, updated_at FROM inventory.utenze WHERE deleted_at IS NULL ORDER BY id DESC");
+    const res = await query("SELECT id, username, sistema_target_id, tipo_utenza_id, bao_owner_id, ticket_id, vault_path, attiva, note, created_by, created_at, updated_at FROM inventory.utenze WHERE deleted_at IS NULL ORDER BY updated_at DESC");
     return c.json(res.rows);
   } catch (err) {
     console.error("Utenze error:", err);
+    return c.json([], 200);
+  }
+});
+
+app.get("/api/audit-logs", authMiddleware, async (c) => {
+  try {
+    const res = await query("SELECT * FROM inventory.audit_log ORDER BY timestamp DESC LIMIT 100");
+    return c.json(res.rows);
+  } catch (err) {
+    console.error("Audit logs error:", err);
+    return c.json([], 200);
+  }
+});
+
+app.get("/api/history", authMiddleware, async (c) => {
+  try {
+    const res = await query("SELECT * FROM inventory.storico_password ORDER BY created_at DESC LIMIT 100");
+    return c.json(res.rows);
+  } catch (err) {
+    console.error("History error:", err);
     return c.json([], 200);
   }
 });
@@ -167,17 +187,24 @@ app.post("/api/utenze/:id/rotate", authMiddleware, async (c) => {
     const res = await query("SELECT username FROM inventory.utenze WHERE id = $1 AND deleted_at IS NULL", [id]);
     if (res.rows.length === 0) return c.json({ error: "Not found" }, 404);
     
+    // Actual persistence: Update updated_at in utenze
+    await query("UPDATE inventory.utenze SET updated_at = NOW() WHERE id = $1", [id]);
+    
     // Log the action
     await query(
       `INSERT INTO inventory.audit_log (utente_operatore, azione, dettagli) VALUES ($1, $2, $3)`,
       [user.email, 'ROTATE_PASSWORD', JSON.stringify({ utenza_id: id, username: res.rows[0].username, manual: !!body.nuova_password })]
     );
     
+    // Get system name for history
+    const sysRes = await query("SELECT nome_sistema FROM inventory.sistemi_target WHERE id = (SELECT sistema_target_id FROM inventory.utenze WHERE id = $1)", [id]);
+    const sistemaNome = sysRes.rows[0]?.nome_sistema || 'Unknown';
+
     // Simulate updating storico_password
     await query(
       `INSERT INTO inventory.storico_password (utenza_id, username, sistema_nome, vault_path, azione, eseguito_da)
        VALUES ($1, $2, $3, $4, $5, $6)`,
-      [id, res.rows[0].username, "Simulated System", "secret/data/...", "MODIFICA_PASSWORD", user.email]
+      [id, res.rows[0].username, sistemaNome, "secret/data/...", "MODIFICA_PASSWORD", user.email]
     );
 
     return c.json({ message: "Updated successfully", password: nuova_password });

@@ -29,6 +29,8 @@ export const api = {
   getLookups: (): Promise<Lookups> => fetchWithAuth('/lookups'),
   getSistemi: (): Promise<Sistema[]> => fetchWithAuth('/lookups/sistemi'),
   getUtenze: (): Promise<Utenza[]> => fetchWithAuth('/utenze'),
+  getAuditLogs: (): Promise<any[]> => fetchWithAuth('/audit-logs'),
+  getHistory: (): Promise<any[]> => fetchWithAuth('/history'),
   
   createUtenza: (data: Partial<Utenza> & { password_chiaro: string }) => 
     fetchWithAuth('/utenze', {
