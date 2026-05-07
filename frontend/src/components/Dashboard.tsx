@@ -3,6 +3,8 @@ import { authClient } from '../auth-client';
 import { api } from '../utils/api';
 import { Utenza, Sistema, Lookups } from '../types';
 import InventoryTable from './InventoryTable';
+import AuditLogTable from './AuditLogTable';
+import HistoryTable from './HistoryTable';
 import AddUtenzaModal from './AddUtenzaModal';
 import SudoModal from './SudoModal';
 
@@ -13,6 +15,8 @@ export default function Dashboard() {
   // Data State
   const [utenze, setUtenze] = useState<Utenza[]>([]);
   const [sistemi, setSistemi] = useState<Sistema[]>([]);
+  const [auditLogs, setAuditLogs] = useState<any[]>([]);
+  const [history, setHistory] = useState<any[]>([]);
   const [lookups, setLookups] = useState<Lookups | null>(null);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -25,14 +29,18 @@ export default function Dashboard() {
   const fetchData = async () => {
     try {
       setLoading(true);
-      const [l, s, u] = await Promise.all([
+      const [l, s, u, logs, hist] = await Promise.all([
         api.getLookups(),
         api.getSistemi(),
-        api.getUtenze()
+        api.getUtenze(),
+        api.getAuditLogs(),
+        api.getHistory()
       ]);
       setLookups(l);
       setSistemi(s);
       setUtenze(u);
+      setAuditLogs(logs);
+      setHistory(hist);
     } catch (err) {
       console.error('Failed to load data', err);
     } finally {
@@ -148,27 +156,36 @@ export default function Dashboard() {
           )}
         </header>
 
-        {activeTab === 'inventory' ? (
-          loading || !lookups ? (
-            <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}>
-              <div className="spinner"></div>
-            </div>
-          ) : (
-            <InventoryTable 
-              utenze={utenze}
-              sistemi={sistemi}
-              lookups={lookups}
-              searchTerm={searchTerm}
-              onReveal={(id) => setSudoModal({ isOpen: true, action: 'reveal', utenzaId: id })}
-              onRotate={(id) => setSudoModal({ isOpen: true, action: 'rotate', utenzaId: id })}
-              onDelete={(id) => setSudoModal({ isOpen: true, action: 'delete', utenzaId: id })}
-            />
-          )
-        ) : (
-          <div className="glass-card" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
-            <h3 style={{ color: 'white', fontSize: '20px', marginBottom: '8px' }}>Sezione in Costruzione</h3>
-            <p>Questa funzionalità sarà disponibile nel prossimo aggiornamento.</p>
+        {loading || !lookups ? (
+          <div style={{ display: 'flex', justifyContent: 'center', padding: '40px' }}>
+            <div className="spinner"></div>
           </div>
+        ) : (
+          <>
+            {activeTab === 'inventory' && (
+              <InventoryTable 
+                utenze={utenze}
+                sistemi={sistemi}
+                lookups={lookups}
+                searchTerm={searchTerm}
+                onReveal={(id) => setSudoModal({ isOpen: true, action: 'reveal', utenzaId: id })}
+                onRotate={(id) => setSudoModal({ isOpen: true, action: 'rotate', utenzaId: id })}
+                onDelete={(id) => setSudoModal({ isOpen: true, action: 'delete', utenzaId: id })}
+              />
+            )}
+            {activeTab === 'audit' && (
+              <AuditLogTable logs={auditLogs} />
+            )}
+            {activeTab === 'history' && (
+              <HistoryTable history={history} />
+            )}
+            {(activeTab === 'users') && (
+              <div className="glass-card" style={{ padding: '40px', textAlign: 'center', color: 'var(--text-muted)' }}>
+                <h3 style={{ color: 'white', fontSize: '20px', marginBottom: '8px' }}>Gestione Utenti</h3>
+                <p>Questa funzionalità sarà disponibile nel prossimo aggiornamento.</p>
+              </div>
+            )}
+          </>
         )}
       </main>
 
