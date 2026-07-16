@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # =============================================================================
-# Nexi Vault - Script di Avvio Rapido con Podman
+# M-DN Vault - Script di Avvio Rapido con Podman
 # =============================================================================
 # Questo script:
 # 1. Verifica che Podman e podman-compose siano installati
@@ -70,7 +70,7 @@ if [ ! -f ".env" ]; then
     
     # Genera un segreto casuale per JWT se non presente
     if ! grep -q "^JWT_SECRET_KEY=" .env || grep -q "^JWT_SECRET_KEY=$" .env; then
-        SECRET=$(openssl rand -hex 32 2>/dev/null || head -c 32 /dev/urandom | xxd -p)
+        SECRET="" rand -hex 32 2>/dev/null || head -c 32 /dev/urandom | xxd -p)
         sed -i "s/^JWT_SECRET_KEY=.*/JWT_SECRET_KEY=${SECRET}/" .env
         log_success "Generato JWT_SECRET_KEY casuale"
     fi
@@ -120,7 +120,7 @@ podman-compose ps
 # =============================================================================
 echo ""
 echo "============================================================================="
-echo -e "${GREEN}Nexi Vault avviato con successo!${NC}"
+echo -e "${GREEN}M-DN Vault avviato con successo!${NC}"
 echo "============================================================================="
 echo ""
 echo -e "${BLUE}Accesso ai servizi:${NC}"

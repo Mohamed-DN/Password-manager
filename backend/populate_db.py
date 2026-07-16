@@ -14,8 +14,8 @@ async def populate():
     conn = await asyncpg.connect(user="inventory_admin", password="SuperSegretaAdmin123!", database="vault_inventory_db", host="inventory-db", port=5432)
     
     # Inseriamo BAO
-    bao_mario = await conn.fetchval("INSERT INTO inventory.bao_owners (nome, cognome, email) VALUES ('Mario', 'Rossi', 'mario.rossi@nexi.it') ON CONFLICT (email) DO UPDATE SET nome = EXCLUDED.nome RETURNING id")
-    bao_fabio = await conn.fetchval("INSERT INTO inventory.bao_owners (nome, cognome, email) VALUES ('Fabio', 'Olivo', 'fabio.olivo@nexi.it') ON CONFLICT (email) DO UPDATE SET nome = EXCLUDED.nome RETURNING id")
+    bao_mario = await conn.fetchval("INSERT INTO inventory.bao_owners (nome, cognome, email) VALUES ('Mario', 'Rossi', 'mario.rossi@m-dn.it') ON CONFLICT (email) DO UPDATE SET nome = EXCLUDED.nome RETURNING id")
+    bao_fabio = await conn.fetchval("INSERT INTO inventory.bao_owners (nome, cognome, email) VALUES ('Fabio', 'Olivo', 'fabio.olivo@m-dn.it') ON CONFLICT (email) DO UPDATE SET nome = EXCLUDED.nome RETURNING id")
     
     # Inseriamo Ticket
     ticket_ir = await conn.fetchval("INSERT INTO inventory.ticket (codice_ticket) VALUES ('IRxxxxxxxx') ON CONFLICT (codice_ticket) DO UPDATE SET codice_ticket = EXCLUDED.codice_ticket RETURNING id")

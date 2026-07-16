@@ -7,7 +7,7 @@
 # ─────────────────────────────────────────────────────────────────
 # Local (inside the backup container / backups_data volume):
 #   7 daily pg_dumps + 7 daily vault snapshots  →  RETENTION_DAYS=7
-# Offsite (oemdb1:/backup/nexi-vault-backups):
+# Offsite (oemdb1:/backup/m-dn-vault-backups):
 #   30 daily copies                             →  OFFSITE_RETENTION_DAYS=30
 #   oemdb1 has 40 TB free; 30 days of compressed
 #   pg_dumps for a password manager is well under 1 GB total.
@@ -16,7 +16,7 @@
 # Daily backup at 02:00 — pg_dump + vault raft snapshot
 0 2 * * * /usr/local/bin/backup.sh >> /var/log/backup.log 2>&1
 
-# Daily offsite copy at 02:30 — rsync everything to oemdb1:/backup/nexi-vault-backups
+# Daily offsite copy at 02:30 — rsync everything to oemdb1:/backup/m-dn-vault-backups
 # Runs 30 minutes after the backup to ensure files are complete.
 # This is a no-op when OFFSITE_HOST is not set.
 30 2 * * * /usr/local/bin/offsite-copy.sh >> /var/log/backup.log 2>&1

@@ -57,7 +57,7 @@ async def get_current_session(request: Request) -> dict:
     if auth_header.startswith('Bearer '):
         token = auth_header[7:]
     else:
-        token = request.cookies.get('NEXIVAULT_SESS')
+        token = request.cookies.get('M-DNVAULT_SESS')
     
     if not token:
         raise HTTPException(status_code=401, detail="Non autenticato")
@@ -134,7 +134,7 @@ async def login(credentials: LoginRequest, request: Request):
         
         # Set cookie sicuro
         response.set_cookie(
-            key="NEXIVAULT_SESS",
+            key="M-DNVAULT_SESS",
             value=session_token,
             httponly=True,
             secure=True,
@@ -163,7 +163,7 @@ async def logout(session: dict = Depends(get_current_session), request: Request 
         )
     
     response = JSONResponse(content={"success": True})
-    response.delete_cookie("NEXIVAULT_SESS")
+    response.delete_cookie("M-DNVAULT_SESS")
     return response
 
 

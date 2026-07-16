@@ -1,4 +1,4 @@
-# Guida alla Produzione con Podman — Nexi Vault Inventory
+# Guida alla Produzione con Podman — M-DN Vault Inventory
 
 **Versione:** 1.0  
 **Data:** 2026-04-30  
@@ -61,7 +61,7 @@
 ╔══════════════════════════════════════════════════════════════════╗
 ║               GATEWAY oemdb1 — Storage DR                        ║
 ║                                                                  ║
-║  /backup/nexi-vault-backups/                                     ║
+║  /backup/m-dn-vault-backups/                                     ║
 ║    ├── postgres/        ← pg_dump files (ritention 7 giorni)     ║
 ║    ├── vault/           ← Raft snapshots (ritention 7 giorni)    ║
 ║    └── vault-init/      ← init.json (unseal keys + root token)   ║
@@ -195,7 +195,7 @@ OpenBao (Raft storage)
     │
     ├── Ogni ora: vault operator raft snapshot save → /backups/vault/
     │
-    └── Ogni ora (+5 min): rsync → oemdb1:/backup/nexi-vault-backups/vault/
+    └── Ogni ora (+5 min): rsync → oemdb1:/backup/m-dn-vault-backups/vault/
 ```
 
 | Metrica | Valore |
@@ -214,7 +214,7 @@ Il file `/vault/init/init.json` contiene:
 Il backup container copia `init.json` su oemdb1 ogni ora. Verificarne la presenza:
 
 ```bash
-ssh backup@oemdb1 ls -lh /backup/nexi-vault-backups/vault-init/
+ssh backup@oemdb1 ls -lh /backup/m-dn-vault-backups/vault-init/
 ```
 
 ### Monitorare lo stato di OpenBao
@@ -241,13 +241,13 @@ Ogni ora il container `inventory-backup` esegue `/usr/local/bin/backup.sh`:
 1. **pg_dump** del database → `/backups/postgres/pg_backup_YYYYMMDD_HHMMSS.dump`
 2. **vault raft snapshot** → `/backups/vault/vault_snapshot_YYYYMMDD_HHMMSS.snap`
 3. **Copia di init.json** → `/backups/vault-init/init.json`
-4. **rsync via SSH** di tutto `/backups/` → `oemdb1:/backup/nexi-vault-backups/`
+4. **rsync via SSH** di tutto `/backups/` → `oemdb1:/backup/m-dn-vault-backups/`
 5. **Pulizia** dei file locali più vecchi di 7 giorni
 
 ### Struttura su oemdb1
 
 ```
-oemdb1:/backup/nexi-vault-backups/
+oemdb1:/backup/m-dn-vault-backups/
 ├── postgres/
 │   ├── pg_backup_20260430_020000.dump
 │   ├── pg_backup_20260430_030000.dump
@@ -268,7 +268,7 @@ sudo bash podman/setup-offsite-ssh.sh
 ```
 
 Questo script:
-1. Genera una coppia di chiavi ed25519 in `/opt/nexi-vault/ssh/`
+1. Genera una coppia di chiavi ed25519 in `/opt/m-dn-vault/ssh/`
 2. Installa la chiave pubblica su `backup@oemdb1` via SSH interattivo (chiede la password una sola volta)
 3. Salva il fingerprint di oemdb1 in `known_hosts` per strict host verification
 4. Testa la connessione passwordless
@@ -286,8 +286,8 @@ podman-compose -f podman-compose.yml up -d --no-deps backup
 podman exec inventory-backup cat /var/log/backup.log
 
 # Elenco backup su oemdb1
-ssh backup@oemdb1 ls -lht /backup/nexi-vault-backups/postgres/ | head -5
-ssh backup@oemdb1 ls -lht /backup/nexi-vault-backups/vault/ | head -5
+ssh backup@oemdb1 ls -lht /backup/m-dn-vault-backups/postgres/ | head -5
+ssh backup@oemdb1 ls -lht /backup/m-dn-vault-backups/vault/ | head -5
 
 # Test manuale (esegue subito un backup completo + rsync)
 podman exec inventory-backup /usr/local/bin/backup.sh
@@ -346,7 +346,7 @@ podman exec inventory-db \
 
 # Backup manuale di prova
 podman exec inventory-backup /usr/local/bin/backup.sh
-ssh backup@oemdb1 ls -lht /backup/nexi-vault-backups/postgres/ | head -3
+ssh backup@oemdb1 ls -lht /backup/m-dn-vault-backups/postgres/ | head -3
 ```
 
 ---
@@ -482,11 +482,11 @@ until podman inspect inventory-bao \
 done
 
 # 6. Leggere il root token (dal nuovo init.json generato al riavvio)
-ROOT_TOKEN=$(podman exec inventory-bao jq -r '.root_token' /vault/init/init.json)
+ROOT_TOKEN="" exec inventory-bao jq -r '.root_token' /vault/init/init.json)
 
 # 7. Restore dello snapshot
 podman exec inventory-backup \
-  sh -c "VAULT_TOKEN=${ROOT_TOKEN} vault operator raft snapshot restore \
+  sh -c "VAULT_TOKEN="" vault operator raft snapshot restore \
     -address=http://inventory-bao:8200 \
     -force \
     /backups/vault/${SNAP_FILE}"
@@ -509,7 +509,7 @@ podman exec inventory-bao vault status -address=http://127.0.0.1:8200
 ```bash
 OEMDB1="oemdb1"
 OEMDB1_USER="backup"
-OEMDB1_PATH="/backup/nexi-vault-backups"
+OEMDB1_PATH="/backup/m-dn-vault-backups"
 
 # 1. Verificare i file disponibili su oemdb1
 ssh ${OEMDB1_USER}@${OEMDB1} ls -lht ${OEMDB1_PATH}/vault/ | head -5
@@ -522,7 +522,7 @@ scp "${OEMDB1_USER}@${OEMDB1}:${OEMDB1_PATH}/vault/${SNAP}" /tmp/vault-restore/r
 scp "${OEMDB1_USER}@${OEMDB1}:${OEMDB1_PATH}/vault-init/init.json" /tmp/vault-restore/init.json
 
 # Verificare l'integrità di init.json
-cat /tmp/vault-restore/init.json | jq '{root_token: .root_token, keys_count: (.unseal_keys_b64 | length)}'
+cat /tmp/vault-restore/init.json | jq '{root_token: "" keys_count: (.unseal_keys_b64 | length)}'
 # Atteso: keys_count: 5, root_token non vuoto
 
 # 3. Fermare OpenBao e rimuovere il volume corrotto
@@ -538,12 +538,12 @@ done
 
 # 5. Copiare init.json nel container e leggere il root token
 podman cp /tmp/vault-restore/init.json inventory-bao:/vault/init/init.json
-ROOT_TOKEN=$(cat /tmp/vault-restore/init.json | jq -r '.root_token')
+ROOT_TOKEN="" /tmp/vault-restore/init.json | jq -r '.root_token')
 
 # 6. Copiare lo snapshot e fare il restore
 podman cp /tmp/vault-restore/restore.snap inventory-bao:/tmp/restore.snap
 podman exec inventory-bao \
-  sh -c "VAULT_TOKEN=${ROOT_TOKEN} vault operator raft snapshot restore \
+  sh -c "VAULT_TOKEN="" vault operator raft snapshot restore \
     -address=http://127.0.0.1:8200 \
     -force \
     /tmp/restore.snap"
@@ -570,12 +570,12 @@ podman-compose -f podman-compose.yml stop backup backend
 
 # 3. Drop e recreate del database
 podman exec inventory-db \
-  bash -c "PGPASSWORD=rootpassword123 dropdb -U postgres vault_inventory_db --if-exists && \
-           PGPASSWORD=rootpassword123 createdb -U postgres vault_inventory_db"
+  bash -c "PGPASSWORD="" dropdb -U postgres vault_inventory_db --if-exists && \
+           PGPASSWORD="" createdb -U postgres vault_inventory_db"
 
 # 4. Restore schema e dati
 podman exec inventory-backup \
-  bash -c "PGPASSWORD=rootpassword123 pg_restore \
+  bash -c "PGPASSWORD="" pg_restore \
     -h inventory-db -U postgres \
     -d vault_inventory_db \
     --clean --if-exists \
@@ -583,12 +583,12 @@ podman exec inventory-backup \
 
 # 5. Re-applicare ruoli e permessi
 podman exec inventory-db \
-  bash -c "PGPASSWORD=rootpassword123 psql -U postgres vault_inventory_db \
+  bash -c "PGPASSWORD="" psql -U postgres vault_inventory_db \
     -f /docker-entrypoint-initdb.d/01-init.sql" 2>&1 | grep -E "ERROR|NOTICE|ROLE" || true
 
 # 6. Verificare i conteggi
 podman exec inventory-db \
-  bash -c "PGPASSWORD=rootpassword123 psql -U postgres -d vault_inventory_db \
+  bash -c "PGPASSWORD="" psql -U postgres -d vault_inventory_db \
     -c 'SELECT count(*) AS utenze FROM inventory.utenze; SELECT count(*) AS sistemi FROM inventory.sistemi_target;'"
 
 # 7. Riavviare i servizi
@@ -604,7 +604,7 @@ podman-compose -f podman-compose.yml up -d backend backup
 ```bash
 OEMDB1="oemdb1"
 OEMDB1_USER="backup"
-OEMDB1_PATH="/backup/nexi-vault-backups"
+OEMDB1_PATH="/backup/m-dn-vault-backups"
 
 # 1. Trovare il pg_dump più recente su oemdb1
 ssh ${OEMDB1_USER}@${OEMDB1} ls -lht ${OEMDB1_PATH}/postgres/ | head -5
@@ -622,19 +622,19 @@ podman-compose -f podman-compose.yml stop backup backend
 
 # 5. Drop e recreate
 podman exec inventory-db \
-  bash -c "PGPASSWORD=rootpassword123 dropdb -U postgres vault_inventory_db --if-exists && \
-           PGPASSWORD=rootpassword123 createdb -U postgres vault_inventory_db"
+  bash -c "PGPASSWORD="" dropdb -U postgres vault_inventory_db --if-exists && \
+           PGPASSWORD="" createdb -U postgres vault_inventory_db"
 
 # 6. Restore
 podman exec inventory-db \
-  bash -c "PGPASSWORD=rootpassword123 pg_restore \
+  bash -c "PGPASSWORD="" pg_restore \
     -U postgres -d vault_inventory_db \
     --clean --if-exists \
     /tmp/restore.dump"
 
 # 7. Re-applicare permessi e riavviare
 podman exec inventory-db \
-  bash -c "PGPASSWORD=rootpassword123 psql -U postgres vault_inventory_db \
+  bash -c "PGPASSWORD="" psql -U postgres vault_inventory_db \
     -f /docker-entrypoint-initdb.d/01-init.sql" 2>&1 | grep -E "ERROR|NOTICE|ROLE" || true
 
 podman-compose -f podman-compose.yml up -d backend backup
@@ -675,7 +675,7 @@ $EDITOR .env
 
 OEMDB1="oemdb1"
 OEMDB1_USER="backup"
-OEMDB1_PATH="/backup/nexi-vault-backups"
+OEMDB1_PATH="/backup/m-dn-vault-backups"
 RESTORE_DIR="/tmp/dr-restore"
 
 mkdir -p ${RESTORE_DIR}/postgres ${RESTORE_DIR}/vault ${RESTORE_DIR}/vault-init
@@ -697,7 +697,7 @@ scp "${OEMDB1_USER}@${OEMDB1}:${OEMDB1_PATH}/vault-init/init.json" ${RESTORE_DIR
 # Verificare init.json (FONDAMENTALE)
 echo "=== Verifica init.json ==="
 cat ${RESTORE_DIR}/vault-init/init.json | \
-  jq '{root_token: .root_token, keys_count: (.unseal_keys_b64 | length)}'
+  jq '{root_token: "" keys_count: (.unseal_keys_b64 | length)}'
 # DEVE mostrare: keys_count: 5, root_token non vuoto
 
 echo "=== Dimensione dump PostgreSQL ==="
@@ -739,25 +739,25 @@ podman cp ${RESTORE_DIR}/postgres/restore.dump inventory-db:/tmp/restore.dump
 
 # Drop e recreate database
 podman exec inventory-db \
-  bash -c "PGPASSWORD=rootpassword123 dropdb -U postgres vault_inventory_db --if-exists && \
-           PGPASSWORD=rootpassword123 createdb -U postgres vault_inventory_db"
+  bash -c "PGPASSWORD="" dropdb -U postgres vault_inventory_db --if-exists && \
+           PGPASSWORD="" createdb -U postgres vault_inventory_db"
 
 # Restore schema e dati
 podman exec inventory-db \
-  bash -c "PGPASSWORD=rootpassword123 pg_restore \
+  bash -c "PGPASSWORD="" pg_restore \
     -U postgres -d vault_inventory_db \
     --clean --if-exists \
     /tmp/restore.dump"
 
 # Re-applicare ruoli e permessi
 podman exec inventory-db \
-  bash -c "PGPASSWORD=rootpassword123 psql -U postgres vault_inventory_db \
+  bash -c "PGPASSWORD="" psql -U postgres vault_inventory_db \
     -f /docker-entrypoint-initdb.d/01-init.sql" 2>&1 | grep -E "ERROR|NOTICE|ROLE" || true
 
 # Verifica conteggi
 echo "=== Verifica conteggi PostgreSQL ==="
 podman exec inventory-db \
-  bash -c "PGPASSWORD=rootpassword123 psql -U postgres -d vault_inventory_db \
+  bash -c "PGPASSWORD="" psql -U postgres -d vault_inventory_db \
     -c 'SELECT count(*) AS utenze FROM inventory.utenze; SELECT count(*) AS sistemi FROM inventory.sistemi_target;'"
 
 echo "✅ PostgreSQL restore completato"
@@ -770,14 +770,14 @@ echo "=== Restore OpenBao dal snapshot ==="
 
 # Copiare init.json nel container OpenBao
 podman cp ${RESTORE_DIR}/vault-init/init.json inventory-bao:/vault/init/init.json
-ROOT_TOKEN=$(cat ${RESTORE_DIR}/vault-init/init.json | jq -r '.root_token')
+ROOT_TOKEN="" ${RESTORE_DIR}/vault-init/init.json | jq -r '.root_token')
 
 # Copiare lo snapshot nel container
 podman cp ${RESTORE_DIR}/vault/restore.snap inventory-bao:/tmp/restore.snap
 
 # Restore del Raft snapshot (sovrascrive lo stato corrente)
 podman exec inventory-bao \
-  sh -c "VAULT_TOKEN=${ROOT_TOKEN} vault operator raft snapshot restore \
+  sh -c "VAULT_TOKEN="" vault operator raft snapshot restore \
     -address=http://127.0.0.1:8200 \
     -force \
     /tmp/restore.snap"

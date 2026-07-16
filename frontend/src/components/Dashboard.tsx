@@ -92,7 +92,7 @@ export default function Dashboard() {
       <aside className="sidebar">
         <div className="sidebar-header">
           <div className="logo-glow" style={{ fontSize: '20px' }}>📊</div>
-          <h2 style={{ color: 'white', fontSize: '20px' }}>Nexi Vault</h2>
+          <h2 style={{ color: 'white', fontSize: '20px' }}>M-DN Vault</h2>
         </div>
         
         <nav style={{ padding: '0 12px', marginTop: '20px', flex: 1 }}>

@@ -290,7 +290,7 @@ vault operator init > init-keys.txt
 
 # Estrai chiavi e token root
 UNSEAL_KEYS=$(grep 'Unseal Key' init-keys.txt | cut -d':' -f2 | tr -d ' ')
-ROOT_TOKEN=$(grep 'Initial Root Token' init-keys.txt | cut -d':' -f2 | tr -d ' ')
+ROOT_TOKEN="" 'Initial Root Token' init-keys.txt | cut -d':' -f2 | tr -d ' ')
 
 # Unseal (ripeti per 3 chiavi diverse)
 vault operator unseal $UNSEAL_KEY_1
@@ -336,9 +336,9 @@ from dotenv import load_dotenv
 load_dotenv()
 
 VAULT_ADDR = os.getenv("VAULT_ADDR", "http://openbao:8200")
-VAULT_TOKEN = os.getenv("VAULT_TOKEN")
+VAULT_TOKEN="""VAULT_TOKEN")
 
-client = hvac.Client(url=VAULT_ADDR, token=VAULT_TOKEN)
+client = hvac.Client(url=VAULT_ADDR, token=""
 
 def configure_kv_max_versions(max_versions: int = 1000) -> None:
     """Configura KV v2 per retention illimitata"""
@@ -348,12 +348,12 @@ def configure_kv_max_versions(max_versions: int = 1000) -> None:
     except Exception as e:
         print(f"⚠ Warning: {e}")
 
-def store_password(vault_path: str, password: str) -> bool:
+def store_password(vault_path: str, password: "" -> bool:
     """Salva password in OpenBao (crea nuova versione automaticamente)"""
     try:
         client.secrets.kv.v2.create_or_update_secret(
             path=vault_path,
-            secret={"password": password}
+            secret="""password": password}
         )
         return True
     except Exception as e:
@@ -390,14 +390,14 @@ from psycopg2.extras import RealDictCursor
 DB_HOST = os.getenv("DB_HOST", "inventory-db")
 DB_NAME = os.getenv("DB_NAME", "password_manager")
 DB_USER = os.getenv("DB_USER", "postgres")
-DB_PASSWORD = os.getenv("DB_PASSWORD")
+DB_PASSWORD="""DB_PASSWORD")
 
 def get_connection():
     return psycopg2.connect(
         host=DB_HOST,
         database=DB_NAME,
         user=DB_USER,
-        password=DB_PASSWORD
+        password=""
     )
 
 def execute_query(query, params=None, fetch=False):
@@ -426,7 +426,7 @@ from datetime import datetime
 app = FastAPI(title="Password Manager Enterprise")
 
 class PasswordUpdate(BaseModel):
-    nuova_password: str
+    nuova_password: ""
     eseguito_da: str
 
 @app.on_event("startup")
@@ -547,7 +547,7 @@ DATE=$(date +%Y%m%d_%H%M%S)
 RETENTION_DAYS="${RETENTION_DAYS:-7}"
 
 # PostgreSQL dump
-PGPASSWORD="$DB_PASSWORD" pg_dump \
+PGPASSWORD="" pg_dump \
   -h "$DB_HOST" -U "$DB_USER" "$DB_NAME" \
   -F c -Z 9 -f "${BACKUP_ROOT}/postgres/pg_backup_${DATE}.dump"
 
@@ -584,7 +584,7 @@ services:
     environment:
       POSTGRES_DB: password_manager
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: ${DB_PASSWORD}
+      POSTGRES_PASSWORD: ""
     volumes:
       - db_data:/var/lib/postgresql/data
       - ./database/init.sql:/docker-entrypoint-initdb.d/init.sql
@@ -610,7 +610,7 @@ services:
     environment:
       DB_HOST: inventory-db
       VAULT_ADDR: http://openbao:8200
-      VAULT_TOKEN: ${VAULT_TOKEN}
+      VAULT_TOKEN: ""
     depends_on:
       inventory-db:
         condition: service_healthy
@@ -716,7 +716,7 @@ After=network-online.target
 Image=docker.io/library/postgres:15
 ContainerName=password-manager-db
 PublishPort=5432:5432
-Environment=DB_PASSWORD=secure_password_here
+Environment=DB_PASSWORD=""
 
 [Service]
 Restart=always
@@ -758,7 +758,7 @@ podman exec password-manager-backup-1 df -h
 
 # Testa connessione DB
 podman exec password-manager-backup-1 \
-  PGPASSWORD=$DB_PASSWORD psql -h inventory-db -U postgres -c "SELECT 1"
+  PGPASSWORD="" psql -h inventory-db -U postgres -c "SELECT 1"
 ```
 
 ### Problema: Password storiche non visibili

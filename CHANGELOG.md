@@ -1,4 +1,4 @@
-# Changelog NexiVault
+# Changelog M-DNVault
 
 Tutte le modifiche significative a questo progetto saranno documentate in questo file.
 
@@ -170,10 +170,10 @@ Vedi `docs/MIGRATION_GUIDE.md` per dettagli completi.
 
 ## Autori Release
 
-- **v2.0.0**: Team Platform Security - Nexi Group
+- **v2.0.0**: Team Platform Security - M-DN Group
 - **v1.0.0**: Progetto PHP originale (vedi `archive/php-reference/`)
 
 ---
 
-[2.0.0]: https://github.com/nexi-group/nexivault/releases/tag/v2.0.0
-[1.0.0]: https://github.com/nexi-group/nexivault/releases/tag/v1.0.0
+[2.0.0]: https://github.com/m-dn-group/m-dnvault/releases/tag/v2.0.0
+[1.0.0]: https://github.com/m-dn-group/m-dnvault/releases/tag/v1.0.0

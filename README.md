@@ -1,4 +1,4 @@
-# 🔐 NexiVault - Enterprise Password Manager
+# 🔐 M-DNVault - Enterprise Password Manager
 
 Sistema enterprise per la gestione sicura di credenziali e password, sviluppato con architettura moderna e best practices di sicurezza.
 
@@ -8,8 +8,8 @@ Sistema enterprise per la gestione sicura di credenziali e password, sviluppato 
 
 ```bash
 # Clona e entra nella directory
-git clone <repository-url> nexivault
-cd nexivault
+git clone <repository-url> m-dnvault
+cd m-dnvault
 
 # Avvia tutti i servizi
 podman-compose up -d --build
@@ -67,7 +67,7 @@ docker-compose up -d --build
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                      NEXIVAULT STACK                        │
+│                      M-DNVAULT STACK                        │
 ├─────────────────────────────────────────────────────────────┤
 │                                                             │
 │  ┌──────────────┐    ┌──────────────┐    ┌──────────────┐  │
@@ -110,7 +110,7 @@ docker-compose up -d --build
 ## 📁 Struttura Repository
 
 ```
-nexivault/
+m-dnvault/
 ├── backend/                    # API FastAPI Python
 │   ├── main.py                # Entry point applicazione
 │   ├── database.py            # Connessione PostgreSQL async
@@ -197,8 +197,8 @@ REPLICATION_MODE=async
 OFFSITE_HOST=oemdb1
 OFFSITE_PORT=22
 OFFSITE_USER=backup
-OFFSITE_PATH=/backup/nexi-vault-backups
-OFFSITE_SSH_KEY=/opt/nexivault/.ssh/id_rsa
+OFFSITE_PATH=/backup/m-dn-vault-backups
+OFFSITE_SSH_KEY=/opt/m-dnvault/.ssh/id_rsa
 ```
 
 ### Credenziali Default (CAMBIARE IN PRODUZIONE!)
@@ -228,8 +228,8 @@ OFFSITE_SSH_KEY=/opt/nexivault/.ssh/id_rsa
 
 ```bash
 cd /opt
-git clone <repository-url> nexivault
-cd nexivault
+git clone <repository-url> m-dnvault
+cd m-dnvault
 ```
 
 ### Passo 2: Configura SSH per Offsite Backup (Opzionale)
@@ -237,7 +237,7 @@ cd nexivault
 ```bash
 # Genera chiave SSH dedicata
 mkdir -p .ssh
-ssh-keygen -t ed25519 -f .ssh/id_rsa -N "" -C "nexivault-backup"
+ssh-keygen -t ed25519 -f .ssh/id_rsa -N "" -C "m-dnvault-backup"
 
 # Copia public key sul server offsite
 ssh-copy-id -i .ssh/id_rsa.pub backup@oemdb1
@@ -421,7 +421,7 @@ Dal progetto PHP del collega sono stati migrati e migliorati:
 
 ### Architettura
 
-| Aspetto | Progetto PHP | NexiVault Moderno | Beneficio |
+| Aspetto | Progetto PHP | M-DNVault Moderno | Beneficio |
 |---------|--------------|-------------------|-----------|
 | **Linguaggio** | PHP monolitico | Python FastAPI async | Performance + manutenibilità |
 | **Frontend** | PHP templating | React + TypeScript | UX moderna, type safety |
@@ -552,9 +552,9 @@ Vedi [PODMAN_SETUP_GUIDE.md](docs/PODMAN_SETUP_GUIDE.md) per troubleshooting det
 
 ## 📝 License
 
-**Proprietario** - Nexi Group S.p.A.
+**Proprietario** - M-DN Group S.p.A.
 
-Tutti i diritti riservati. Il codice è confidenziale e destinato esclusivamente all'uso interno di Nexi.
+Tutti i diritti riservati. Il codice è confidenziale e destinato esclusivamente all'uso interno di M-DN.
 
 ---
 
@@ -580,5 +580,5 @@ Per assistenza:
 ---
 
 **Ultimo aggiornamento**: Maggio 2025  
-**Versione**: NexiVault 2.0.0  
+**Versione**: M-DNVault 2.0.0  
 **Stato**: ✅ Production Ready

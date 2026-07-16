@@ -1,7 +1,7 @@
 version: '3.8'
 
 # ---------------------------------------------------------------------------
-# Nexi Vault — docker-compose
+# M-DN Vault — docker-compose
 # Includes: primary DB + hot-standby replica + persistent Vault (Raft) +
 #           hourly backup service (pg_dump + vault snapshot)
 # ---------------------------------------------------------------------------
@@ -16,7 +16,7 @@ services:
     container_name: inventory-db
     environment:
       POSTGRES_DB: vault_inventory_db
-      POSTGRES_PASSWORD: rootpassword123
+      POSTGRES_PASSWORD: ""
     # Enable WAL-level replication and archiving at startup
     command: >
       postgres
@@ -53,12 +53,12 @@ services:
     entrypoint: ["/bin/bash", "/scripts/init-replica.sh"]
     environment:
       PGDATA: /var/lib/postgresql/data
-      POSTGRES_PASSWORD: rootpassword123
+      POSTGRES_PASSWORD: ""
       POSTGRES_DB: vault_inventory_db
       PRIMARY_HOST: inventory-db
       PRIMARY_PORT: 5432
       REPLICATION_USER: replicator
-      REPLICATION_PASSWORD: ReplicaPassword123!
+      REPLICATION_PASSWORD: ""
     volumes:
       - postgres_replica_data:/var/lib/postgresql/data
       - ./scripts/init-replica.sh:/scripts/init-replica.sh:ro
@@ -117,11 +117,10 @@ services:
       - VAULT_ADDR=http://inventory-bao:8200
       # VAULT_TOKEN is intentionally left empty here so vault.py reads the
       # dynamically generated root token from the vault_init volume.
-      - VAULT_TOKEN=
-      - VAULT_INIT_FILE=/vault/init/init.json
+      - VAULT_TOKEN="" VAULT_INIT_FILE=/vault/init/init.json
       - DB_HOST=inventory-db
       - DB_USER=inventory_app
-      - DB_PASSWORD=PasswordBackend123!
+      - DB_PASSWORD=""
       - DB_NAME=vault_inventory_db
       - DB_SCHEMA=inventory
     volumes:
@@ -154,7 +153,7 @@ services:
       - DB_HOST=inventory-db
       - DB_PORT=5432
       - DB_USER=inventory_app
-      - DB_PASSWORD=PasswordBackend123!
+      - DB_PASSWORD=""
       - DB_NAME=vault_inventory_db
       - VAULT_ADDR=http://inventory-bao:8200
       - VAULT_INIT_FILE=/vault/init/init.json
@@ -168,7 +167,7 @@ services:
       - OFFSITE_HOST=${OFFSITE_HOST:-}          # e.g. backup-server.company.it
       - OFFSITE_PORT=${OFFSITE_PORT:-22}
       - OFFSITE_USER=${OFFSITE_USER:-backup}
-      - OFFSITE_PATH=${OFFSITE_PATH:-/opt/nexi-vault-backups}
+      - OFFSITE_PATH=${OFFSITE_PATH:-/opt/m-dn-vault-backups}
       - OFFSITE_SSH_KEY=${OFFSITE_SSH_KEY:-/root/.ssh/id_rsa}
     volumes:
       - backups_data:/backups
@@ -176,7 +175,7 @@ services:
       - postgres_wal_archive:/var/lib/postgresql/wal_archive:ro
       # Mount the SSH private key for offsite rsync (optional — only needed when
       # OFFSITE_HOST is configured). Example host-path bind:
-      #   - /etc/nexi-vault/ssh/id_rsa:/root/.ssh/id_rsa:ro
+      #   - /etc/m-dn-vault/ssh/id_rsa:/root/.ssh/id_rsa:ro
     restart: unless-stopped
 
 # ===========================================================================
