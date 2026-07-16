@@ -20,7 +20,7 @@ Il file `backend/vault.py` utilizza la libreria `hvac` per interagire con le API
 2.  **Scrittura**: Quando crei un'entry, la password viene inviata a `client.secrets.kv.v2.create_or_update_secret`.
 3.  **Lettura**: Quando riveli la password, il backend autentica la richiesta (verifica permessi) e interroga Vault.
 
-## Hardening per la Produzione (Nexi)
+## Hardening per la Produzione (M-DN)
 
 Per passare dal setup attuale a un sistema hardened su RedHat 9:
 

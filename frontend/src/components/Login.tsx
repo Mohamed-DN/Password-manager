@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { authClient } from '../auth-client';
 
 export default function Login() {
-  const [email, setEmail] = useState('admin@nexivault.local');
+  const [email, setEmail] = useState('admin@m-dnvault.local');
   const [password, setPassword] = useState('Sole_2482002');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -43,7 +43,7 @@ export default function Login() {
           <div className="logo-glow" style={{ width: '56px', height: '56px', borderRadius: '16px', marginBottom: '20px', fontSize: '32px' }}>
             🔒
           </div>
-          <h1 style={{ fontSize: '28px', color: 'white', marginBottom: '8px' }}>Nexi Vault</h1>
+          <h1 style={{ fontSize: '28px', color: 'white', marginBottom: '8px' }}>M-DN Vault</h1>
           <p style={{ color: 'var(--text-muted)' }}>Secure Enterprise Identity</p>
         </div>
 

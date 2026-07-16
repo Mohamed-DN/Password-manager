@@ -1,4 +1,4 @@
-# 📋 Guida alla Migrazione - NexiVault 2.0
+# 📋 Guida alla Migrazione - M-DNVault 2.0
 
 ## Panoramica
 
@@ -72,7 +72,7 @@ Questa guida documenta la migrazione del progetto PHP del collega nella tua arch
 ### 1. Backup Dati Esistenti
 ```bash
 # Esporta dati dal vecchio sistema
-sudo podman exec postgresql pg_dump -U postgres nexivaultom > backup_old.sql
+sudo podman exec postgresql pg_dump -U postgres m-dnvaultom > backup_old.sql
 ```
 
 ### 2. Applica Nuovo Schema
@@ -167,4 +167,4 @@ Per domande o problemi:
 
 **Versione**: 2.0  
 **Data**: Maggio 2025  
-**Autori**: Team NexiVault
+**Autori**: Team M-DNVault

@@ -1,5 +1,5 @@
 # ---------------------------------------------------------------------------
-# Nexi Vault — podman-compose.yml (simplified for local dev)
+# M-DN Vault — podman-compose.yml (simplified for local dev)
 # Usage: podman compose up -d --build
 # ---------------------------------------------------------------------------
 
@@ -13,7 +13,7 @@ services:
     container_name: inventory-db
     environment:
       POSTGRES_DB: vault_inventory_db
-      POSTGRES_PASSWORD: rootpassword123
+      POSTGRES_PASSWORD: ""
     ports:
       - "5432:5432"
     volumes:
@@ -40,12 +40,12 @@ services:
     environment:
       DB_HOST: inventory-db
       DB_USER: inventory_app
-      DB_PASSWORD: PasswordBackend123!
+      DB_PASSWORD: ""
       DB_NAME: vault_inventory_db
       DB_PORT: "5432"
       BETTER_AUTH_URL: http://localhost:5174
-      BETTER_AUTH_SECRET: NexiVaultSuperSecret2026!xK9mP4qR7wZ2
-      JWT_SECRET_KEY: NexiVaultSuperSecret2026!xK9mP4qR7wZ2
+      BETTER_AUTH_SECRET: ""
+      JWT_SECRET_KEY: M-DNVaultSuperSecret2026!xK9mP4qR7wZ2
     restart: unless-stopped
 
   # =========================================================================

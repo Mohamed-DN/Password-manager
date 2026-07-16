@@ -1,13 +1,13 @@
 #!/bin/bash
 # podman/deploy.sh
 # ---------------------------------------------------------------------------
-# Full first-deploy script for Nexi Vault on an OCI host using Podman.
+# Full first-deploy script for M-DN Vault on an OCI host using Podman.
 #
 # Run as root (or with sudo) on the OCI host:
 #   sudo bash podman/deploy.sh
 #
 # What this script does:
-#   1. Creates the persistent data directories under /opt/nexi-vault/
+#   1. Creates the persistent data directories under /opt/m-dn-vault/
 #   2. Copies config files to the expected host paths
 #   3. Builds the three custom container images (openbao, backend, backup)
 #   4. Starts all services via podman-compose (or systemd Quadlets if chosen)
@@ -21,7 +21,7 @@
 set -euo pipefail
 
 REPO_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-BASE_DIR="/opt/nexi-vault"
+BASE_DIR="/opt/m-dn-vault"
 LOG_PREFIX="[deploy]"
 log() { echo "${LOG_PREFIX} $*"; }
 
@@ -143,8 +143,8 @@ echo "   podman exec inventory-bao cat /vault/init/init.json"
 echo ""
 echo " BACK THIS FILE UP IMMEDIATELY:"
 echo "   podman exec inventory-bao cat /vault/init/init.json > \\"
-echo "     /opt/nexi-vault/data/vault-init/init.json"
-echo "   chmod 600 /opt/nexi-vault/data/vault-init/init.json"
+echo "     /opt/m-dn-vault/data/vault-init/init.json"
+echo "   chmod 600 /opt/m-dn-vault/data/vault-init/init.json"
 echo ""
 echo " Service status:"
 podman ps --format "table {{.Names}}\t{{.Status}}"

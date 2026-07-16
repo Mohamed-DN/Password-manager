@@ -1,5 +1,5 @@
 # DDR — Disaster Recovery Drill
-## Nexi Vault Inventory — Password Manager
+## M-DN Vault Inventory — Password Manager
 
 **Versione documento:** 1.0  
 **Data revisione:** 2026-04-29  
@@ -27,7 +27,7 @@
 ## 1. Obiettivi e Scope
 
 ### Scopo del drill
-Verificare che il team sia in grado di ripristinare il servizio **Nexi Vault Inventory** entro i tempi RTO/RPO definiti a partire da qualsiasi scenario di guasto, incluso il crash totale dell'host che ospita tutti i container.
+Verificare che il team sia in grado di ripristinare il servizio **M-DN Vault Inventory** entro i tempi RTO/RPO definiti a partire da qualsiasi scenario di guasto, incluso il crash totale dell'host che ospita tutti i container.
 
 ### Componenti in scope
 | Componente | Container | Dati critici |
@@ -77,7 +77,7 @@ Verificare che il team sia in grado di ripristinare il servizio **Nexi Vault Inv
                         ▼
 ┌─────────────────────────────────────────────────────┐
 │              HOST BACKUP REMOTO (DR)                  │
-│  /opt/nexi-vault-backups/                            │
+│  /opt/m-dn-vault-backups/                            │
 │    ├── postgres/    ← pg_dump files                   │
 │    ├── vault/       ← raft snapshots                  │
 │    └── vault-init/  ← init.json con unseal keys       │
@@ -105,9 +105,9 @@ Prima di eseguire qualsiasi scenario di test, verificare:
 
 - [ ] L'operatore ha accesso `sudo` / `podman` sul server host (Podman ≥ 4.0 installato)
 - [ ] Il server DR (oemdb1) è raggiungibile via SSH (backup@oemdb1)
-- [ ] Esiste almeno un pg_dump valido in `/backup/nexi-vault-backups/postgres/` su oemdb1
-- [ ] Esiste almeno uno snapshot Vault valido in `/backup/nexi-vault-backups/vault/` su oemdb1
-- [ ] Esiste una copia di `init.json` in `/backup/nexi-vault-backups/vault-init/` su oemdb1
+- [ ] Esiste almeno un pg_dump valido in `/backup/m-dn-vault-backups/postgres/` su oemdb1
+- [ ] Esiste almeno uno snapshot Vault valido in `/backup/m-dn-vault-backups/vault/` su oemdb1
+- [ ] Esiste una copia di `init.json` in `/backup/m-dn-vault-backups/vault-init/` su oemdb1
 - [ ] Il drill viene eseguito su un ambiente di test, **MAI direttamente in produzione**
 - [ ] Tutti i membri del team coinvolti sono disponibili per tutta la durata del test
 - [ ] Viene mantenuto un log scritto di ogni azione con orario (usare la tabella Log in fondo)
@@ -262,7 +262,7 @@ podman-compose -f podman-compose.yml up -d backup backend
 
 ```bash
 # Elencare i path segreti esistenti (li useremo per la verifica post-restore)
-ROOT_TOKEN=$(podman exec inventory-bao jq -r '.root_token' /vault/init/init.json)
+ROOT_TOKEN="" exec inventory-bao jq -r '.root_token' /vault/init/init.json)
 
 podman exec inventory-bao \
   vault kv list -address=http://127.0.0.1:8200 secret/ \
@@ -298,11 +298,11 @@ podman exec inventory-backup ls -lt /backups/vault/ | head -5
 SNAP_FILE="vault_snapshot_YYYYMMDD_HHMMSS.snap"   # ← sostituire con il nome reale
 
 # 3. Leggere il root token dal vault_init (il container ha già rilevato il nuovo init)
-ROOT_TOKEN=$(podman exec inventory-bao jq -r '.root_token' /vault/init/init.json)
+ROOT_TOKEN="" exec inventory-bao jq -r '.root_token' /vault/init/init.json)
 
 # 4. Restore dello snapshot
 podman exec inventory-backup \
-  sh -c "VAULT_TOKEN=${ROOT_TOKEN} vault operator raft snapshot restore \
+  sh -c "VAULT_TOKEN="" vault operator raft snapshot restore \
     -address=http://inventory-bao:8200 \
     -force \
     /backups/vault/${SNAP_FILE}"
@@ -320,11 +320,11 @@ podman exec inventory-bao vault status -address=http://127.0.0.1:8200
 ### Fase C.4 — Verifica integrità segreti
 
 ```bash
-ROOT_TOKEN=$(podman exec inventory-bao jq -r '.root_token' /vault/init/init.json)
+ROOT_TOKEN="" exec inventory-bao jq -r '.root_token' /vault/init/init.json)
 
 # Verificare che i path registrati in C.1 siano presenti
 podman exec inventory-bao \
-  env VAULT_TOKEN=${ROOT_TOKEN} \
+  env VAULT_TOKEN="" \
   vault kv list -address=http://127.0.0.1:8200 secret/
 ```
 
@@ -352,12 +352,12 @@ Eseguire questa verifica **prima** di simulare il crash (o all'inizio del drill 
 
 ```bash
 # Su oemdb1, verificare la presenza dei file
-ssh backup@oemdb1 ls -lht /backup/nexi-vault-backups/postgres/ | head -5
-ssh backup@oemdb1 ls -lht /backup/nexi-vault-backups/vault/ | head -5
-ssh backup@oemdb1 ls -lht /backup/nexi-vault-backups/vault-init/ | head -5
+ssh backup@oemdb1 ls -lht /backup/m-dn-vault-backups/postgres/ | head -5
+ssh backup@oemdb1 ls -lht /backup/m-dn-vault-backups/vault/ | head -5
+ssh backup@oemdb1 ls -lht /backup/m-dn-vault-backups/vault-init/ | head -5
 
 # Verificare che l'ultimo backup non sia troppo vecchio (max 1 ora)
-LAST_PG=$(ssh backup@oemdb1 ls -t /backup/nexi-vault-backups/postgres/ | head -1)
+LAST_PG=$(ssh backup@oemdb1 ls -t /backup/m-dn-vault-backups/postgres/ | head -1)
 echo "Ultimo pg_dump: $LAST_PG"
 ```
 
@@ -417,7 +417,7 @@ Ora completamento provisioning: ___________ Operatore: ___________
 ```bash
 OFFSITE_HOST="oemdb1"
 OFFSITE_USER="backup"
-OFFSITE_PATH="/backup/nexi-vault-backups"
+OFFSITE_PATH="/backup/m-dn-vault-backups"
 
 # Copiare i file più recenti
 scp "${OFFSITE_USER}@${OFFSITE_HOST}:${OFFSITE_PATH}/postgres/$(ssh ${OFFSITE_USER}@${OFFSITE_HOST} ls -t ${OFFSITE_PATH}/postgres/ | head -1)" \
@@ -433,7 +433,7 @@ scp "${OFFSITE_USER}@${OFFSITE_HOST}:${OFFSITE_PATH}/vault-init/init.json" \
 ls -lh /tmp/dr-restore/postgres/
 ls -lh /tmp/dr-restore/vault/
 ls -lh /tmp/dr-restore/vault-init/init.json
-cat /tmp/dr-restore/vault-init/init.json | jq '{root_token: .root_token, keys_count: (.unseal_keys_b64 | length)}'
+cat /tmp/dr-restore/vault-init/init.json | jq '{root_token: "" keys_count: (.unseal_keys_b64 | length)}'
 ```
 
 **Risultato atteso:** `keys_count: 5` e `root_token` non vuoto.
@@ -478,12 +478,12 @@ podman cp "${PG_DUMP_FILE}" inventory-db:/tmp/restore.dump
 
 # 5b. Drop e recreate del database (init.sql lo crea, qui lo resettiamo)
 podman exec inventory-db \
-  bash -c "PGPASSWORD=rootpassword123 dropdb -U postgres vault_inventory_db --if-exists && \
-           PGPASSWORD=rootpassword123 createdb -U postgres vault_inventory_db"
+  bash -c "PGPASSWORD="" dropdb -U postgres vault_inventory_db --if-exists && \
+           PGPASSWORD="" createdb -U postgres vault_inventory_db"
 
 # 5c. Restore schema e dati
 podman exec inventory-db \
-  bash -c "PGPASSWORD=rootpassword123 pg_restore \
+  bash -c "PGPASSWORD="" pg_restore \
     -U postgres \
     -d vault_inventory_db \
     --clean --if-exists \
@@ -491,12 +491,12 @@ podman exec inventory-db \
 
 # 5d. Re-applicare ruoli e permessi (non inclusi nel dump custom)
 podman exec inventory-db \
-  bash -c "PGPASSWORD=rootpassword123 psql -U postgres vault_inventory_db \
+  bash -c "PGPASSWORD="" psql -U postgres vault_inventory_db \
     -f /docker-entrypoint-initdb.d/01-init.sql" 2>&1 | grep -E "ERROR|NOTICE|ROLE" || true
 
 # 5e. Verifica conteggi
 podman exec inventory-db \
-  bash -c "PGPASSWORD=rootpassword123 psql -U postgres -d vault_inventory_db \
+  bash -c "PGPASSWORD="" psql -U postgres -d vault_inventory_db \
     -c 'SELECT count(*) AS utenze FROM inventory.utenze; SELECT count(*) AS sistemi FROM inventory.sistemi_target;'"
 ```
 
@@ -524,14 +524,14 @@ echo "Ripristino snapshot: $SNAP_FILE"
 podman cp "${SNAP_FILE}" inventory-bao:/tmp/restore.snap
 
 # 6b. Leggere il root token dal init.json locale
-ROOT_TOKEN=$(cat /tmp/dr-restore/vault-init/init.json | jq -r '.root_token')
+ROOT_TOKEN="" /tmp/dr-restore/vault-init/init.json | jq -r '.root_token')
 
 # 6c. Copiare init.json nel volume vault_init del container
 podman cp /tmp/dr-restore/vault-init/init.json inventory-bao:/vault/init/init.json
 
 # 6d. Restore dello snapshot Raft
 podman exec inventory-bao \
-  sh -c "VAULT_TOKEN=${ROOT_TOKEN} vault operator raft snapshot restore \
+  sh -c "VAULT_TOKEN="" vault operator raft snapshot restore \
     -address=http://127.0.0.1:8200 \
     -force \
     /tmp/restore.snap"

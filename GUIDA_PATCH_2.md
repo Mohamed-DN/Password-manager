@@ -1,6 +1,6 @@
-# 🛡️ Nexi Vault - Patch 2 Guide
+# 🛡️ M-DN Vault - Patch 2 Guide
 
-Questa guida descrive la nuova architettura di **Nexi Vault Password Manager**, aggiornata per utilizzare le tecnologie più moderne allo stato dell'arte (Full-stack TypeScript) e un sistema di autenticazione enterprise.
+Questa guida descrive la nuova architettura di **M-DN Vault Password Manager**, aggiornata per utilizzare le tecnologie più moderne allo stato dell'arte (Full-stack TypeScript) e un sistema di autenticazione enterprise.
 
 ## 🏗️ Nuova Architettura
 Abbiamo effettuato un refactoring completo passando da un'architettura ibrida a una **Full-stack TypeScript**:
@@ -16,7 +16,7 @@ Abbiamo effettuato un refactoring completo passando da un'architettura ibrida a 
 Abbiamo implementato **Better Auth**, un sistema di autenticazione solido che gestisce sessioni persistenti e sicurezza avanzata.
 
 ### Credenziali di Accesso
-- **Email**: `admin@nexivault.local`
+- **Email**: `admin@m-dnvault.local`
 - **Password**: `Sole_2482002`
 
 ### Re-autenticazione (Sudo Flow)
@@ -41,7 +41,7 @@ La configurazione è ora gestita interamente tramite **Podman Compose**:
 
 1. Assicurati che il file `.env` contenga le chiavi di Better Auth:
    ```env
-   BETTER_AUTH_SECRET=79637a7a6964612d64617368626f6172642d736563726574
+   BETTER_AUTH_SECRET=""
    BETTER_AUTH_URL=http://localhost:8000
    ```
 2. Avvia i container:

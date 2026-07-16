@@ -20,8 +20,8 @@ set -euo pipefail
 OFFSITE_HOST="${OFFSITE_HOST:-oemdb1}"
 OFFSITE_PORT="${OFFSITE_PORT:-22}"
 OFFSITE_USER="${OFFSITE_USER:-backup}"
-OFFSITE_PATH="${OFFSITE_PATH:-/backup/nexi-vault-backups}"
-SSH_KEY_DIR="/opt/nexi-vault/ssh"
+OFFSITE_PATH="${OFFSITE_PATH:-/backup/m-dn-vault-backups}"
+SSH_KEY_DIR="/opt/m-dn-vault/ssh"
 SSH_KEY_FILE="${SSH_KEY_DIR}/id_rsa"
 KNOWN_HOSTS_FILE="${SSH_KEY_DIR}/known_hosts"
 
@@ -48,7 +48,7 @@ else
     ssh-keygen -t ed25519 \
         -f "$SSH_KEY_FILE" \
         -N "" \
-        -C "nexi-vault-backup@$(hostname -s)"
+        -C "m-dn-vault-backup@$(hostname -s)"
     chmod 600 "$SSH_KEY_FILE"
     log "SSH key generated."
 fi

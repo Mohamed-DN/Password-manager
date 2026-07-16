@@ -47,7 +47,7 @@ CREATE TABLE verification (
 );
 
 INSERT INTO "user" (id, name, email, "emailVerified", "createdAt", "updatedAt")
-VALUES ('admin-uuid-123', 'Administrator', 'admin@nexivault.local', true, NOW(), NOW());
+VALUES ('admin-uuid-123', 'Administrator', 'admin@m-dnvault.local', true, NOW(), NOW());
 
 INSERT INTO account (id, "accountId", "providerId", "userId", password, "createdAt", "updatedAt")
-VALUES ('admin-account-uuid', 'admin@nexivault.local', 'email', 'admin-uuid-123', '$2b$12$dbcovlVtgWMcT2wT4vww1.9fPnOQTtg0NCt9NJ/XU8Juh/7Mle/RW', NOW(), NOW());
+VALUES ('admin-account-uuid', 'admin@m-dnvault.local', 'email', 'admin-uuid-123', '$2b$12$dbcovlVtgWMcT2wT4vww1.9fPnOQTtg0NCt9NJ/XU8Juh/7Mle/RW', NOW(), NOW());

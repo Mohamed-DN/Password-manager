@@ -1,6 +1,6 @@
 # 🚀 Guida Completa all'Installazione con Podman
 
-Questa guida spiega passo-passo come部署are NexiVault utilizzando Podman, il runtime container OCI-compatibile.
+Questa guida spiega passo-passo come部署are M-DNVault utilizzando Podman, il runtime container OCI-compatibile.
 
 ## 📋 Indice
 
@@ -84,14 +84,14 @@ podman info | grep -i rootless
 
 ```bash
 cd /opt
-git clone <repository-url> nexivault
-cd nexivault
+git clone <repository-url> m-dnvault
+cd m-dnvault
 ```
 
 ### 2. Struttura Directory
 
 ```
-/opt/nexivault/
+/opt/m-dnvault/
 ├── backend/              # API FastAPI
 ├── frontend/             # UI React
 ├── vault/                # OpenBao configuration
@@ -114,10 +114,10 @@ REPLICATION_MODE=async
 OFFSITE_HOST=oemdb1
 OFFSITE_PORT=22
 OFFSITE_USER=backup
-OFFSITE_PATH=/backup/nexi-vault-backups
+OFFSITE_PATH=/backup/m-dn-vault-backups
 
 # SSH key per offsite backup (generata con setup-offsite-ssh.sh)
-OFFSITE_SSH_KEY=/opt/nexivault/.ssh/id_rsa
+OFFSITE_SSH_KEY=/opt/m-dnvault/.ssh/id_rsa
 ```
 
 ---
@@ -127,7 +127,7 @@ OFFSITE_SSH_KEY=/opt/nexivault/.ssh/id_rsa
 ### 1. Build e Start
 
 ```bash
-cd /opt/nexivault
+cd /opt/m-dnvault
 
 # Build e avvio di tutti i servizi
 podman-compose up -d --build
@@ -144,10 +144,10 @@ Output atteso:
 NAME                    IMAGE                        STATUS
 inventory-db            postgres:16-alpine           Up (healthy)
 inventory-db-replica    postgres:16-alpine           Up (healthy)
-inventory-bao           nexivault-vault              Up (healthy)
-inventory-api           nexivault-backend            Up
+inventory-bao           m-dnvault-vault              Up (healthy)
+inventory-api           m-dnvault-backend            Up
 inventory-ui            node:22-alpine               Up
-inventory-backup        nexivault-backup             Up
+inventory-backup        m-dnvault-backup             Up
 ```
 
 ### 3. Log dei Servizi
@@ -192,7 +192,7 @@ curl http://localhost:8000/api/lookups
 
 Apri browser su: **http://localhost:5173**
 
-Dovresti vedere la dashboard di NexiVault.
+Dovresti vedere la dashboard di M-DNVault.
 
 ---
 
@@ -365,14 +365,14 @@ sudo firewall-cmd --reload
 
 ```bash
 # Genera chiave dedicata
-ssh-keygen -t ed25519 -f /opt/nexivault/.ssh/id_rsa -N "" -C "nexivault-backup"
+ssh-keygen -t ed25519 -f /opt/m-dnvault/.ssh/id_rsa -N "" -C "m-dnvault-backup"
 
 # Copia public key sul server offsite
-ssh-copy-id -i /opt/nexivault/.ssh/id_rsa.pub backup@oemdb1
+ssh-copy-id -i /opt/m-dnvault/.ssh/id_rsa.pub backup@oemdb1
 
 # Imposta permessi corretti
-chmod 600 /opt/nexivault/.ssh/id_rsa
-chmod 644 /opt/nexivault/.ssh/id_rsa.pub
+chmod 600 /opt/m-dnvault/.ssh/id_rsa
+chmod 644 /opt/m-dnvault/.ssh/id_rsa.pub
 ```
 
 ### 3. Audit Logging
@@ -405,4 +405,4 @@ Per problemi o domande:
 ---
 
 **Ultimo aggiornamento**: Maggio 2025  
-**Versione**: NexiVault 2.0
+**Versione**: M-DNVault 2.0

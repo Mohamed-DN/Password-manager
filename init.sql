@@ -177,8 +177,8 @@ INSERT INTO tipi_utenza (codice, descrizione) VALUES ('OBJ', 'Utenza Owner/Schem
 
 -- Inserimento Dati Fittizi per Test
 INSERT INTO bao_owners (nome, cognome, email, matricola) VALUES 
-('Mario', 'Rossi', 'mario.rossi@nexivault.local', 'NX001'),
-('Luigi', 'Bianchi', 'luigi.bianchi@nexivault.local', 'NX002');
+('Mario', 'Rossi', 'mario.rossi@m-dnvault.local', 'NX001'),
+('Luigi', 'Bianchi', 'luigi.bianchi@m-dnvault.local', 'NX002');
 
 INSERT INTO sistemi_target (nome_sistema, ambiente_id, tecnologia_id, descrizione) VALUES
 ('CRM_DB_CORE', 1, 1, 'Database Centrale CRM in Produzione'),

@@ -61,13 +61,13 @@ fi
 # --------------------------------------------------------------------------
 # 5. Enable the KV v2 secrets engine at 'secret/' (idempotent)
 # --------------------------------------------------------------------------
-ROOT_TOKEN=$(jq -r '.root_token' "$INIT_FILE")
-export VAULT_TOKEN="$ROOT_TOKEN"
+ROOT_TOKEN="" -r '.root_token' "$INIT_FILE")
+export VAULT_TOKEN=""
 
 # Check if the KV engine is already mounted; if not, enable it.
-if VAULT_TOKEN="$ROOT_TOKEN" vault secrets list -address="$VAULT_ADDR" 2>/dev/null | grep -q "^secret/"; then
+if VAULT_TOKEN="" vault secrets list -address="$VAULT_ADDR" 2>/dev/null | grep -q "^secret/"; then
     echo "==> [vault-entrypoint] KV-v2 engine already mounted at 'secret/'."
-elif VAULT_TOKEN="$ROOT_TOKEN" vault secrets enable \
+elif VAULT_TOKEN="" vault secrets enable \
          -address="$VAULT_ADDR" \
          -version=2 \
          -path=secret kv 2>/dev/null; then

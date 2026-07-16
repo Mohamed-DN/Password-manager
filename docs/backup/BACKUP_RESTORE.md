@@ -1,6 +1,6 @@
 # Backup & Restore Guide
 
-This document explains the backup strategy implemented for Nexi Vault and provides step-by-step restore procedures.
+This document explains the backup strategy implemented for M-DN Vault and provides step-by-step restore procedures.
 
 ---
 
@@ -42,12 +42,12 @@ podman exec inventory-backup ls /backups/postgres/
 
 # 2. Drop and recreate the database (run from the postgres primary container)
 podman exec -it inventory-db bash -c \
-  "PGPASSWORD=rootpassword123 dropdb -U postgres vault_inventory_db && \
-   PGPASSWORD=rootpassword123 createdb -U postgres vault_inventory_db"
+  "PGPASSWORD="" dropdb -U postgres vault_inventory_db && \
+   PGPASSWORD="" createdb -U postgres vault_inventory_db"
 
 # 3. Restore the schema and data
 podman exec -it inventory-backup bash -c \
-  "PGPASSWORD=rootpassword123 pg_restore \
+  "PGPASSWORD="" pg_restore \
      -h inventory-db \
      -U postgres \
      -d vault_inventory_db \
@@ -56,7 +56,7 @@ podman exec -it inventory-backup bash -c \
 
 # 4. Re-apply roles and permissions (they are not included in pg_dump by default)
 podman exec -it inventory-db bash -c \
-  "PGPASSWORD=rootpassword123 psql -U postgres vault_inventory_db \
+  "PGPASSWORD="" psql -U postgres vault_inventory_db \
    -f /docker-entrypoint-initdb.d/init.sql"
 ```
 
@@ -115,12 +115,12 @@ podman-compose -f podman-compose.yml up -d postgres
 podman exec inventory-backup ls /backups/vault/
 
 # 2. Read the root token from the init file
-ROOT_TOKEN=$(podman exec inventory-bao \
+ROOT_TOKEN="" exec inventory-bao \
   sh -c "jq -r '.root_token' /vault/init/init.json")
 
 # 3. Restore the snapshot (Vault must be running and unsealed)
 podman exec inventory-backup sh -c \
-  "VAULT_TOKEN=${ROOT_TOKEN} vault operator raft snapshot restore \
+  "VAULT_TOKEN="" vault operator raft snapshot restore \
      -address=http://inventory-bao:8200 \
      -force \
      /backups/vault/vault_snapshot_YYYYMMDD_HHMMSS.snap"
@@ -140,10 +140,10 @@ podman-compose -f podman-compose.yml up -d openbao
 
 # 3. Wait for vault to be healthy, then restore the snapshot
 #    (get new root token from the freshly written init.json)
-ROOT_TOKEN=$(podman exec inventory-bao sh -c "jq -r '.root_token' /vault/init/init.json")
+ROOT_TOKEN="" exec inventory-bao sh -c "jq -r '.root_token' /vault/init/init.json")
 
 podman exec inventory-backup sh -c \
-  "VAULT_TOKEN=${ROOT_TOKEN} vault operator raft snapshot restore \
+  "VAULT_TOKEN="" vault operator raft snapshot restore \
      -address=http://inventory-bao:8200 \
      -force \
      /backups/vault/vault_snapshot_YYYYMMDD_HHMMSS.snap"

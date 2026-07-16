@@ -1,4 +1,4 @@
-# Script di avvio rapido per Nexi Secure Vault
+# Script di avvio rapido per M-DN Secure Vault
 Write-Host "🚀 Avvio del sistema Secure Vault..." -ForegroundColor Cyan
 docker-compose up -d --build
 Write-Host "✅ Sistema avviato!" -ForegroundColor Green

@@ -1,5 +1,5 @@
 -- =============================================================================
--- init.sql — NexiVault | Database Schema Production-Ready
+-- init.sql — M-DNVault | Database Schema Production-Ready
 -- Basato sullo schema del collega PHP, adattato per FastAPI + React
 -- =============================================================================
 

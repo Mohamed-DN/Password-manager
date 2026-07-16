@@ -253,12 +253,12 @@ const initAdmin = async () => {
   await new Promise(r => setTimeout(r, 2000));
   
   try {
-    const existing = await query('SELECT * FROM public."user" WHERE email = $1', ['admin@nexivault.local']);
+    const existing = await query('SELECT * FROM public."user" WHERE email = $1', ['admin@m-dnvault.local']);
     if (existing.rows.length === 0) {
       console.log("Creating admin user via Better Auth API...");
       await auth.api.signUpEmail({
         body: {
-          email: "admin@nexivault.local",
+          email: "admin@m-dnvault.local",
           password: "Sole_2482002",
           name: "Administrator"
         }
