@@ -1,6 +1,14 @@
-# 🔐 M-DNVault - Enterprise Password Manager
+# M-DNVault
 
-Sistema enterprise per la gestione sicura di credenziali e password, sviluppato con architettura moderna e best practices di sicurezza.
+Progetto di inventario degli asset database e gestione delle credenziali, co-sviluppato con un collega. Mohamed contribuisce all'architettura e alla direzione del prodotto; l'attribuzione dello sviluppo è condivisa.
+
+## Percorso corrente e documentazione storica
+
+La revisione corrente contiene un backend **TypeScript/Hono con Better Auth** (`backend/src/index.ts`), un frontend **React 19/Vite** e PostgreSQL. Il [profilo Podman locale](podman-compose.yml) espone il frontend sulla porta **5174** e l'API sulla **8000**; il [profilo Docker](docker-compose.yml) aggiunge OpenBao, replica e backup. Questi profili hanno confini diversi: il profilo Podman semplificato non include quei servizi.
+
+Per il refactoring TypeScript leggi la [guida Patch 2](GUIDA_PATCH_2.md). Le sezioni FastAPI, gli endpoint e le procedure storiche conservati sotto richiedono confronto con il profilo selezionato; non sono una descrizione completa dell'implementazione TypeScript. Sicurezza, restore e uso operativo devono essere provati sull'ambiente destinazione.
+
+**Prima di iniziare:** configura valori locali unici e verifica i bind delle porte e i seed. I valori di esempio nelle vecchie guide non sono credenziali da riutilizzare.
 
 ## 🚀 Quick Start
 
@@ -8,17 +16,17 @@ Sistema enterprise per la gestione sicura di credenziali e password, sviluppato 
 
 ```bash
 # Clona e entra nella directory
-git clone <repository-url> m-dnvault
+git clone https://github.com/Mohamed-DN/Password-manager.git m-dnvault
 cd m-dnvault
 
 # Avvia tutti i servizi
-podman-compose up -d --build
+podman-compose -f podman-compose.yml up -d --build
 
 # Verifica stato
-podman-compose ps
+podman-compose -f podman-compose.yml ps
 
 # Accedi al frontend
-Apri http://localhost:5173
+Apri http://localhost:5174
 ```
 
 ### Avvio con Docker
@@ -39,9 +47,9 @@ docker-compose up -d --build
 
 ---
 
-## 🔒 Caratteristiche Principali
+## 🔒 Caratteristiche del progetto e profilo storico
 
-### Sicurezza Enterprise-Grade
+### Controlli descritti nel profilo storico
 
 | Feature | Descrizione | Beneficio |
 |---------|-------------|-----------|
@@ -63,7 +71,7 @@ docker-compose up -d --build
 
 ---
 
-## 🏗️ Architettura Sistema
+## 🏗️ Architettura storica FastAPI
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -201,17 +209,9 @@ OFFSITE_PATH=/backup/m-dn-vault-backups
 OFFSITE_SSH_KEY=/opt/m-dnvault/.ssh/id_rsa
 ```
 
-### Credenziali Default (CAMBIARE IN PRODUZIONE!)
+### Credenziali del laboratorio
 
-| Servizio | Utente | Password | Note |
-|----------|--------|----------|------|
-| PostgreSQL Admin | `inventory_admin` | `SuperSegretaAdmin123!` | Solo manutenzione DB |
-| PostgreSQL App | `inventory_app` | `PasswordBackend123!` | Backend API |
-| PostgreSQL Read | `inventory_read` | `ReadPassword123!` | Query in lettura |
-| Replication | `replicator` | `ReplicaPassword123!` | Streaming replica |
-| Database Name | `vault_inventory_db` | - | Schema: `inventory` |
-
-⚠️ **Importante**: Cambia tutte le password prima del deploy in produzione!
+Imposta credenziali uniche per database, applicazione e OpenBao seguendo il profilo scelto. Le credenziali dimostrative precedentemente elencate qui sono state rimosse: non qualificano un'installazione sicura e non devono essere riutilizzate. Custodisci chiavi e token fuori dal repository e verifica i seed prima dell'avvio.
 
 ---
 
@@ -270,7 +270,7 @@ podman-compose logs -f
 curl http://localhost:8000/api/lookups
 
 # Test frontend
-Apri http://localhost:5173
+Apri http://localhost:5174
 ```
 
 ### Passo 5: Inizializza OpenBao (Primo Avvio)
@@ -292,7 +292,7 @@ vault operator init -key-shares=5 -key-threshold=3
 
 ---
 
-## 📊 API Endpoints
+## 📊 API Endpoints storici FastAPI
 
 ### Autenticazione
 
@@ -433,7 +433,7 @@ Dal progetto PHP del collega sono stati migrati e migliorati:
 
 ---
 
-## 🧪 Testing
+## 🧪 Testing del percorso storico
 
 ### Backend Tests
 
@@ -581,4 +581,5 @@ Per assistenza:
 
 **Ultimo aggiornamento**: Maggio 2025  
 **Versione**: M-DNVault 2.0.0  
-**Stato**: ✅ Production Ready
+**Stato**: sviluppo; documentazione storica e refactoring TypeScript da verificare sul profilo selezionato.
+
